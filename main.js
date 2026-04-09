@@ -98,7 +98,7 @@ ipcMain.handle('export-pdf', async (e) => {
       }
     });
 
-    await printWin.loadFile('print.html');
+    await printWin.loadFile(path.join(__dirname, 'print.html'));
 
     // Pass state data to the print window
     await printWin.webContents.executeJavaScript(`

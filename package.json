@@ -11,23 +11,26 @@
     "build": "npm run clean && electron-builder"
   },
   "build": {
-    "appId": "com.ted.assignmentdesk",
-    "productName": "AssignmentDesk",
-    "win": {
-      "target": "nsis",
-      "icon": "build/icon.ico"
-    },
-    "directories": {
-      "output": "dist"
-    },
+  "appId": "com.ted.assignmentdesk",
+    "productName": "Assignment Desk",
     "files": [
+      "**/*",
+      "!node_modules/**/*",
+      "print.html",
       "main.js",
       "preload.js",
       "index.html",
       "style.css",
       "renderer.js",
       "assets/**/*"
-    ]
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "directories": {
+      "output": "dist"
+    }
   },
   "devDependencies": {
     "electron": "^41.2.0",
