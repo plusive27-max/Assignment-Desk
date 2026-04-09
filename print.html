@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 12pt;
+      line-height: 1.7;
+      color: #111;
+      background: #fff;
+      padding: 0;
+    }
+
+    .page { padding: 40px 52px; }
+
+    .doc-header {
+      border-bottom: 2px solid #111;
+      padding-bottom: 16px;
+      margin-bottom: 28px;
+    }
+
+    .doc-title {
+      font-size: 22pt;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .doc-meta {
+      font-size: 10pt;
+      color: #555;
+    }
+
+    .doc-progress {
+      font-size: 10pt;
+      color: #555;
+      margin-top: 4px;
+    }
+
+    .section { margin-bottom: 32px; }
+
+    .section-title {
+      font-size: 14pt;
+      font-weight: 700;
+      margin-bottom: 4px;
+      color: #000;
+    }
+
+    .section-meta {
+      font-size: 9pt;
+      color: #888;
+      margin-bottom: 10px;
+    }
+
+    .section-notes {
+      font-size: 11pt;
+      line-height: 1.8;
+      white-space: pre-wrap;
+      margin-bottom: 12px;
+    }
+
+    .section-empty {
+      font-size: 10pt;
+      color: #aaa;
+      font-style: italic;
+    }
+
+    .citations { margin-top: 12px; }
+
+    .citations-title {
+      font-size: 9pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #555;
+      margin-bottom: 6px;
+      border-top: 1px solid #ddd;
+      padding-top: 8px;
+    }
+
+    .citation-line {
+      font-size: 10pt;
+      color: #444;
+      margin-bottom: 4px;
+      padding-left: 16px;
+      text-indent: -16px;
+    }
+
+    .section-divider {
+      border: none;
+      border-top: 1px solid #ddd;
+      margin: 24px 0;
+    }
+
+    .brief-section {
+      background: #f9f9f9;
+      border-left: 3px solid #ccc;
+      padding: 12px 16px;
+      margin-bottom: 28px;
+      font-size: 10pt;
+      color: #555;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .brief-label {
+      font-size: 9pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #999;
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+<div class="page" id="print-root">
+  <p style="color:#aaa;font-style:italic;">Preparing document…</p>
+</div>
+
+<script>
+  function escHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function renderPrint() {
+    const state = window.__PRINT_DATA__;
+    if (!state) return;
+
+    const asgn     = state.assignment || {};
+    const outline  = state.outline    || [];
+    const notes    = state.notes      || {};
+    const progress = state.progress   || {};
+
+    const deadline = asgn.deadline
+      ? new Date(asgn.deadline).toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' })
+      : 'No deadline set';
+
+    const totalWritten = outline.reduce((a, s) => a + (progress[s.id] || 0), 0);
+    const totalTarget  = asgn.totalWords || 0;
+    const pct          = totalTarget > 0 ? Math.min(100, Math.round(totalWritten / totalTarget * 100)) : 0;
+
+    const briefHtml = asgn.brief ? `
+      <div class="brief-section">
+        <div class="brief-label">Assignment Brief</div>
+        ${escHtml(asgn.brief)}
+      </div>
+    ` : '';
+
+    const sectionsHtml = outline.map((section, i) => {
+      const note    = notes[section.id] || { content: '', citations: [] };
+      const written = progress[section.id] || 0;
+      const target  = section.words || 0;
+
+      const notesHtml = note.content?.trim()
+        ? `<div class="section-notes">${escHtml(note.content)}</div>`
+        : `<div class="section-empty">No notes for this section.</div>`;
+
+      const citesHtml = note.citations?.length
+        ? `<div class="citations">
+            <div class="citations-title">References</div>
+            ${note.citations.map(c =>
+              `<div class="citation-line">
+                ${escHtml(c.author)} (${escHtml(c.year)}). <em>${escHtml(c.title)}</em>${c.pub ? '. ' + escHtml(c.pub) : ''}.
+              </div>`
+            ).join('')}
+          </div>`
+        : '';
+
+      const divider = i < outline.length - 1 ? '<hr class="section-divider"/>' : '';
+
+      return `
+        <div class="section">
+          <div class="section-title">${escHtml(section.title)}</div>
+          <div class="section-meta">Target: ${target.toLocaleString()} words · Written: ${written.toLocaleString()} words</div>
+          ${notesHtml}
+          ${citesHtml}
+        </div>
+        ${divider}
+      `;
+    }).join('');
+
+    document.getElementById('print-root').innerHTML = `
+      <div class="doc-header">
+        <div class="doc-title">${escHtml(asgn.title || 'Untitled Assignment')}</div>
+        <div class="doc-meta">
+          ${asgn.subject ? escHtml(asgn.subject) + '  ·  ' : ''}Deadline: ${deadline}
+        </div>
+        <div class="doc-progress">
+          Progress: ${totalWritten.toLocaleString()} / ${totalTarget.toLocaleString()} words (${pct}%)
+        </div>
+      </div>
+      ${briefHtml}
+      ${sectionsHtml}
+    `;
+  }
+
+  // Auto-render if data already present
+  if (window.__PRINT_DATA__) renderPrint();
+</script>
+</body>
+</html>

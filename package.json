@@ -1,0 +1,41 @@
+{
+  "name": "assignment-desk",
+  "version": "1.0.0",
+  "description": "A smart assignment writing companion for students",
+  "author": "Ted",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "clean": "rimraf dist",
+    "build": "npm run clean && electron-builder"
+  },
+  "build": {
+    "appId": "com.ted.assignmentdesk",
+    "productName": "AssignmentDesk",
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "style.css",
+      "renderer.js",
+      "assets/**/*"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^41.2.0",
+    "electron-builder": "^26.8.1",
+    "rimraf": "^5.0.5"
+  },
+  "dependencies": {
+    "mammoth": "^1.12.0",
+    "pdf-parse": "^2.4.5"
+  }
+}
