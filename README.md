@@ -1,7 +1,9 @@
 # 📚 Assignment Desk
 
 A desktop app built with Electron to help students plan, write, and track their assignments — all in one place, offline, with no accounts required.
-
+[![GitHub release](https://img.shields.io/github/v/release/plusive27-max/Assignment-Desk?style=for-the-badge&color=6c8ef5&label=Download)](https://github.com/plusive27-max/Assignment-Desk/releases/latest)
+![Platform](https://img.shields.io/badge/platform-Windows-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 ---
 
 ## ✨ Features
