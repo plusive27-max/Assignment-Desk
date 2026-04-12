@@ -1,6 +1,6 @@
 {
   "name": "assignment-desk",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A smart assignment writing companion for students",
   "author": "Ted",
   "main": "main.js",
@@ -11,22 +11,29 @@
     "build": "npm run clean && electron-builder"
   },
   "build": {
-  "appId": "com.ted.assignmentdesk",
+    "appId": "com.ted.assignmentdesk",
     "productName": "Assignment Desk",
     "files": [
-      "**/*",
-      "!node_modules/**/*",
-      "print.html",
-      "main.js",
-      "preload.js",
-      "index.html",
-      "style.css",
-      "renderer.js",
-      "assets/**/*"
-    ],
+  "main.js",
+  "preload.js",
+  "index.html",
+  "print.html",
+  "style.css",
+  "renderer.js",
+  "assets/**/*",
+  "node_modules/**/*"
+],
     "win": {
       "target": "nsis",
       "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "build/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.png"
     },
     "directories": {
       "output": "dist"

@@ -199,7 +199,9 @@
       ${briefHtml}
       ${sectionsHtml}
     `;
+      window.api?.printReady();
   }
+  
 
   // Auto-render if data already present
   if (window.__PRINT_DATA__) renderPrint();

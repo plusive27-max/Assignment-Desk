@@ -7,6 +7,8 @@ const {
 } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const pdfParse = require('pdf-parse');
+const mammoth = require('mammoth');
 
 // Keep a reference to the main window
 let mainWindow;
@@ -19,16 +21,21 @@ function loadData() {
     if (fs.existsSync(DATA_PATH)) {
       return JSON.parse(fs.readFileSync(DATA_PATH, 'utf-8'));
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error('[Assignment Desk] Failed to load data:', e);
+  }
   return null;
 }
 
 function saveData(data) {
   try {
     fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (e) {}
+  } catch (e) {
+    console.error('[Assignment Desk] Failed to save data:', e);
+    // Send error to renderer so the user sees a toast notification
+    mainWindow?.webContents.send('save-error', e.message);
+  }
 }
-
 // ─── Window ───────────────────────────────────────────────────────────────────
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -55,7 +62,8 @@ function createWindow() {
 
 // ─── IPC — window controls ────────────────────────────────────────────────────
 ipcMain.handle('load-data', () => loadData());
-ipcMain.on('save-data', (e, data) => saveData(data));
+ipcMain.handle('state-load', () => loadData());
+
 
 // Handle state-save (invoked from saveState() in renderer)
 ipcMain.handle('state-save', (e, data) => {
@@ -109,7 +117,7 @@ ipcMain.handle('export-pdf', async (e) => {
     `);
 
     // Small delay to let it render
-    await new Promise(r => setTimeout(r, 800));
+   await new Promise(resolve => ipcMain.once('print-ready', resolve));
 
     const pdfBuffer = await printWin.webContents.printToPDF({
       printBackground: true,
@@ -144,14 +152,12 @@ ipcMain.handle('open-brief-file', async (e) => {
 
   try {
     if (ext === 'pdf') {
-      const pdfParse = require('pdf-parse');
       const buffer = fs.readFileSync(filePath);
       const data = await pdfParse(buffer);
       return { text: data.text, filename: filePath.split(/[\\/]/).pop() };
     }
 
     if (ext === 'docx') {
-      const mammoth = require('mammoth');
       const data = await mammoth.extractRawText({ path: filePath });
       return { text: data.value, filename: filePath.split(/[\\/]/).pop() };
     }
@@ -186,9 +192,33 @@ ipcMain.handle('state-import', async (e) => {
     filters: [{ name: 'JSON', extensions: ['json'] }],
     properties: ['openFile']
   });
-  if (filePaths?.[0]) return JSON.parse(fs.readFileSync(filePaths[0], 'utf8'));
-  return null;
-});
 
+  if (!filePaths?.[0]) return null;
+
+  try {
+    const imported = JSON.parse(fs.readFileSync(filePaths[0], 'utf8'));
+
+    // Basic structure check — must look like an Assignment Desk file
+    if (
+      typeof imported !== 'object' ||
+      !imported.assignment ||
+      !Array.isArray(imported.outline)
+    ) {
+      return { error: 'This does not appear to be a valid Assignment Desk file.' };
+    }
+
+    return imported;
+  } catch (err) {
+    return { error: 'Could not read file: ' + err.message };
+  }
+});
 // ─── App lifecycle ────────────────────────────────────────────────────────────  
 app.whenReady().then(createWindow);
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});

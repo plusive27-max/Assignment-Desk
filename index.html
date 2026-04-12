@@ -1,9 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta
-    http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+  <meta http-equiv="Content-Security-Policy"
+  content="default-src 'self';
+           script-src 'self';
+           style-src 'self' 'unsafe-inline';
+           img-src 'self' data:;
+           connect-src 'self' http://localhost:11434">
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Assignment Desk</title>
@@ -1165,6 +1168,12 @@
         <button class="btn-ghost"   id="upload-brief-btn">📎 Upload PDF or DOCX</button>
         <span id="upload-filename"></span>
       </div>
+      <div class="brief-btn-row">
+    <button class="btn-primary" id="analyse-btn">Analyse Brief</button>
+    <button class="btn-ghost" id="ai-analyse-btn">✨ AI Analyse</button>
+    <button class="btn-ghost" id="upload-brief-btn">Upload PDF or DOCX</button>
+   <span id="upload-filename"></span>
+    </div>
       <div id="brief-results">
         <div class="placeholder-msg">✦ Paste your brief and click Analyse</div>
       </div>
@@ -1310,6 +1319,7 @@
       <textarea id="checker-textarea" placeholder="Paste your essay or assignment draft here…"></textarea>
       <div class="checker-meta" id="checker-meta">Paste text above to begin analysis.</div>
       <button class="btn-primary small" id="checker-run-btn">🔍 Analyse Text</button>
+      <button class="btn-ghost small" id="ai-checker-btn">✨ AI Check</button>
     </div>
     <div class="checker-card">
       <h4>📊 Results</h4>

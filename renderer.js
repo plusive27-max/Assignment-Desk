@@ -1,7 +1,3 @@
-
-window.addEventListener('unhandledrejection', (event) => {
-  alert('Promise error:\n' + event.reason);
-});
 // ─── State ────────────────────────────────────────────────────────────────────
 const state = {
   assignment: { title: '', subject: '', deadline: '', totalWords: 2000, brief: '' },
@@ -15,6 +11,9 @@ let activeNotesSection = null;
 let saveTimer          = null;
 let wcInitialised      = false;
 let notesSearchQuery = '';
+let selectedAiModel = null; // remembers user's model choice
+let aiAbortController = null;
+
 
 
 
@@ -120,7 +119,13 @@ async function init() {
 // ─── Save ─────────────────────────────────────────────────────────────────────
 function scheduleSave() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => window.api.saveData(state), 600);
+  saveTimer = setTimeout(() => {
+    window.api.stateSave({
+      ...state,
+      theme: document.documentElement.getAttribute('data-theme') || 'dark'
+    });
+  }, 600);
+}
   
   // ... your existing localStorage saves ...
   
@@ -135,7 +140,7 @@ function scheduleSave() {
     outline:  state.outline,
     notes:    state.notes,
   });
-}
+
 
 
 // ─── Window controls ──────────────────────────────────────────────────────────
@@ -156,6 +161,8 @@ document.querySelectorAll('.nav-item').forEach(btn => {
     if (btn.dataset.view === 'preview')   renderPreview();
     if (btn.dataset.view === 'refs')      renderRefs();
     if (btn.dataset.view === 'checker')   initChecker();
+    document.getElementById('ai-checker-btn')
+  ?.addEventListener('click', aiCheckDraft);
 
 
   });
@@ -202,6 +209,8 @@ if (wcToggle && wcPanel) {
   briefTA.value = state.assignment.brief || '';
   briefTA.addEventListener('input', () => { state.assignment.brief = briefTA.value; scheduleSave(); });
   document.getElementById('analyse-btn').addEventListener('click', analyseBrief);
+  document.getElementById('ai-analyse-btn')?.addEventListener('click', analyseBriefWithAI);
+
 
   const uploadBtn = document.getElementById('upload-brief-btn');
   if (uploadBtn) uploadBtn.addEventListener('click', handleBriefUpload);
@@ -212,7 +221,15 @@ document.getElementById('export-btn').addEventListener('click', async () => {
 
 document.getElementById('import-btn').addEventListener('click', async () => {
   const saved = await window.api.stateImport();
-  if (saved) { applyStateSnapshot(saved); showToast('Assignment loaded ✓'); }
+  if (!saved) return;
+
+  if (saved.error) {
+    showToast('⚠️ ' + saved.error);
+    return;
+  }
+
+  applyStateSnapshot(saved);
+  showToast('Assignment loaded');
 });
 
 function buildStateSnapshot() {
@@ -254,21 +271,21 @@ function applyStateSnapshot(saved) {
 
   // Export PDF  ← NEW
   const exportBtn = document.getElementById('export-pdf-btn');
-  if (exportBtn) {
-    exportBtn.addEventListener('click', async () => {
-      exportBtn.textContent = '⏳ Exporting…';
-      exportBtn.disabled = true;
-
-      const result = await window.api.exportPdf();
-
-      exportBtn.textContent = '📄 Export PDF';
-      exportBtn.disabled = false;
-
-      if (result?.canceled) return;
-      if (result?.error) { alert('Export failed: ' + result.error); return; }
-      if (result?.success) alert('✅ PDF saved to:\n' + result.path);
-    });
+  if (exportBtn) exportBtn.addEventListener('click', async () => {
+  exportBtn.textContent = 'Exporting...';
+  exportBtn.disabled = true;
+  const result = await window.api.exportPdf();
+  exportBtn.textContent = 'Export PDF';
+  exportBtn.disabled = false;
+  if (result?.canceled) return;
+  if (result?.error) {
+    showToast('⚠️ Export failed: ' + result.error);
+    return;
   }
+  if (result?.success) {
+    showToast('✅ PDF saved successfully!');
+  }
+});
 
   // New assignment
   document.getElementById('new-btn').addEventListener('click', newAssignment);
@@ -294,51 +311,518 @@ function analyseBrief() {
   scheduleSave();
 
   const lower = text.toLowerCase();
+
+  // FIX 1: Use word-boundary regex instead of .includes()
   const found = [];
   for (const [verb, meaning] of Object.entries(VERBS)) {
-    if (lower.includes(verb)) found.push({ verb, meaning });
+    const regex = new RegExp(`\\b${verb}\\b`, 'i');
+    if (regex.test(lower)) found.push({ verb, meaning });
   }
 
   const totalWords = state.assignment.totalWords || 2000;
+  const verbNames = found.map(f => f.verb);
 
-  let structureItems = TEMPLATES.essay;
-  if (found.some(f => ['compare','contrast'].includes(f.verb))) {
+  // FIX 2: Smart template selection based on ALL detected verbs
+  let chosenTemplate = 'essay';
+  let structureItems;
+
+  if (verbNames.some(v => ['compare', 'contrast'].includes(v))) {
+    chosenTemplate = 'compare';
     structureItems = [
-      { title: 'Introduction',       pct: 10 },
+      { title: 'Introduction', pct: 10 },
       { title: 'Subject A Overview', pct: 20 },
       { title: 'Subject B Overview', pct: 20 },
-      { title: 'Similarities',       pct: 20 },
-      { title: 'Differences',        pct: 20 },
-      { title: 'Conclusion',         pct: 10 }
+      { title: 'Similarities', pct: 20 },
+      { title: 'Differences', pct: 20 },
+      { title: 'Conclusion', pct: 10 }
     ];
+  } else if (verbNames.some(v => ['review', 'critically'].includes(v))) {
+    chosenTemplate = 'litreview';
+    structureItems = TEMPLATES.litreview;
+  } else if (verbNames.some(v => ['assess', 'evaluate', 'recommend'].includes(v))) {
+    chosenTemplate = 'casestudy';
+    structureItems = TEMPLATES.casestudy;
+  } else if (verbNames.some(v => ['report', 'investigate', 'analyse', 'analyze'].includes(v))) {
+    chosenTemplate = 'report';
+    structureItems = TEMPLATES.report;
+  } else {
+    chosenTemplate = 'essay';
+    structureItems = TEMPLATES.essay;
+  }
+
+  // FIX 3: Try to extract word count from the brief text itself
+  const wcMatch = text.match(/\b(\d{3,5})\s*(words?|word\s*count)/i);
+  if (wcMatch) {
+    const detectedWC = parseInt(wcMatch[1]);
+    if (detectedWC >= 250 && detectedWC <= 20000) {
+      document.getElementById('asgn-words').value = detectedWC;
+      state.assignment.totalWords = detectedWC;
+      showToast(`Word count detected from brief: ${detectedWC}`);
+    }
   }
 
   const structureHtml = structureItems.map(s =>
-    `<div class="suggestion-item"><span>${s.title}</span><span class="pct">${Math.round(totalWords * s.pct / 100)} words</span></div>`
+    `<div class="suggestion-item">
+      <span>${s.title}</span>
+      <span class="pct">${Math.round(totalWords * s.pct / 100)} words</span>
+    </div>`
   ).join('');
 
   const verbsHtml = found.length
     ? found.map(f =>
-        `<div><span class="verb-tag">${f.verb}</span><div class="verb-meaning">${f.meaning}</div></div>`
+        `<div>
+          <span class="verb-tag">${f.verb}</span>
+          <div class="verb-meaning">${f.meaning}</div>
+        </div>`
       ).join('')
-    : '<p style="color:var(--faint);font-size:0.8rem;">No specific instruction verbs detected. Re-read the question carefully.</p>';
+    : `<p style="color:var(--faint);font-size:0.8rem">
+        No specific instruction verbs detected. Re-read the question carefully.
+      </p>`;
 
   document.getElementById('brief-results').innerHTML = `
     <div class="result-section">
-      <h4>📌 Instruction Verbs Detected</h4>
+      <h4>Instruction Verbs Detected</h4>
       ${verbsHtml}
     </div>
     <div class="result-section">
-      <h4>📐 Suggested Word Count Split</h4>
+      <h4>Suggested Structure: <em>${chosenTemplate}</em></h4>
       ${structureHtml}
-      <button class="btn-ghost" style="margin-top:0.5rem;width:100%;font-size:0.775rem;" id="apply-structure-btn">Apply as Outline →</button>
-    </div>
-  `;
+      <button class="btn-ghost" style="margin-top:0.5rem;width:100%;font-size:0.775rem"
+        id="apply-structure-btn">Apply as Outline</button>
+    </div>`;
 
+  // FIX 4: Apply button now uses the ACTUALLY detected template, not always 'essay'
   document.getElementById('apply-structure-btn')?.addEventListener('click', () => {
-    loadTemplate('essay');
+    if (chosenTemplate === 'compare') {
+      // Custom template — apply manually
+      if (state.outline.length && !confirm('Replace current outline with this template?')) return;
+      const total = state.assignment.totalWords || 2000;
+      state.outline = structureItems.map(s => ({
+        id: Date.now().toString(16) + Math.random().toString(16).slice(2),
+        title: s.title,
+        words: Math.round(total * s.pct / 100)
+      }));
+      state.outline.forEach(s => {
+        if (!state.notes[s.id]) state.notes[s.id] = { content: '', citations: [] };
+      });
+      activeNotesSection = state.outline[0]?.id || null;
+      renderOutline();
+      scheduleSave();
+    } else {
+      loadTemplate(chosenTemplate);
+    }
     document.querySelector('[data-view="outline"]').click();
   });
+}
+    async function analyseBriefWithAI() {
+  const text = document.getElementById('brief-text').value.trim();
+  if (!text) { showToast('Paste a brief first.'); return; }
+
+  const btn = document.getElementById('ai-analyse-btn');
+  const resultsEl = document.getElementById('brief-results');
+
+  // Check Ollama is running
+  try {
+    const ping = await fetch('http://localhost:11434/api/tags');
+    if (!ping.ok) throw new Error();
+  } catch {
+    resultsEl.innerHTML = `
+    <div class="result-section" style="
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 80px;">
+      <h4 style="
+        color: var(--accent-l);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 12px;">
+        ✨ AI Analysis — ${model}
+      </h4>
+      <div id="ai-stream-output" style="
+        color: var(--text);
+        font-size: 0.875rem;
+        line-height: 1.9;
+        white-space: pre-wrap;
+        max-height: calc(100vh - 320px);
+        overflow-y: auto;
+        padding-right: 8px;
+        padding-bottom: 12px;">
+        <span style="color:var(--muted)">Loading ${model}... this may take a moment on first run.</span>
+      </div>
+    </div>`;
+    return;
+  }
+
+  // Check a model is available
+  const tagsRes = await fetch('http://localhost:11434/api/tags');
+  const { models } = await tagsRes.json();
+  if (!models?.length) {
+    resultsEl.innerHTML = `
+      <div class="result-section">
+        <h4>⚠️ No Models Installed</h4>
+        <p style="color:var(--muted);font-size:0.85rem;line-height:1.7">
+          Run this in your terminal then try again:<br><br>
+          <code style="background:var(--bg);padding:4px 8px;border-radius:4px;
+            font-size:0.8rem">ollama pull llama3.2</code>
+        </p>
+      </div>`;
+    return;
+  }
+
+  // Pick best available model
+  const preferred = ['llama3.2', 'llama3.2:3b', 'llama3', 'mistral', 'gemma3'];
+  const modelNames = models.map(m => m.name);
+  // Use previously selected model if still available, otherwise pick best
+if (!selectedAiModel || !modelNames.includes(selectedAiModel)) {
+  selectedAiModel = preferred.find(p => modelNames.some(m => m.startsWith(p)))
+    || modelNames[0];
+}
+const model = selectedAiModel;
+
+  btn.textContent = '⏳ Analysing...';
+  btn.disabled = true;
+
+  resultsEl.innerHTML = `
+  <div style="
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);">
+    <span style="font-size:0.75rem;color:var(--muted);white-space:nowrap">
+      🤖 Model:
+    </span>
+    <select id="ai-model-select" style="
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 5px 8px;
+      border-radius: var(--radius);
+      font: inherit;
+      font-size: 0.8rem;
+      cursor: pointer;">
+      ${modelNames.map(m => `
+        <option value="${m}" ${m === model ? 'selected' : ''}>${m}</option>
+      `).join('')}
+    </select>
+    <button id="ai-rerun-btn" style="
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 5px 10px;
+      border-radius: var(--radius);
+      font: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+      white-space: nowrap;">
+      ↺ Re-run
+    </button>
+  </div>
+  <div class="result-section" style="
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 80px;">
+    <h4 style="
+      color: var(--accent-l);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 12px;">
+      ✨ AI Analysis — ${model}
+    </h4>
+    <div id="ai-stream-output" style="
+      color: var(--text);
+      font-size: 0.875rem;
+      line-height: 1.9;
+      white-space: pre-wrap;
+      max-height: calc(100vh - 320px);
+      overflow-y: auto;
+      padding-right: 8px;
+      padding-bottom: 12px;">
+      <span style="color:var(--muted)">Thinking...</span>
+    </div>
+  </div>`;
+
+// Wire up model selector
+document.getElementById('ai-model-select')?.addEventListener('change', e => {
+  selectedAiModel = e.target.value;
+});
+
+// Wire up re-run button
+document.getElementById('ai-rerun-btn')?.addEventListener('click', () => {
+  analyseBriefWithAI();
+});
+
+  const prompt = `You are an academic writing assistant helping a student understand their assignment brief.
+
+Analyse the following brief and respond with these sections:
+
+1. **Assignment Type** — what kind of assignment is this?
+2. **Key Instruction Verbs** — list each verb and exactly what it requires
+3. **Core Requirements** — bullet point everything the student must cover
+4. **Suggested Structure** — section headings with word count percentages (total: ${state.assignment.totalWords || 2000} words)
+5. **Mistakes to Avoid** — 2 to 3 specific warnings based on this brief
+
+Be concise and practical. Use plain language. Do not repeat the brief back.
+
+BRIEF:
+${text}`;
+
+  try {
+    // Cancel any in-progress request first
+if (aiAbortController) {
+  aiAbortController.abort();
+}
+aiAbortController = new AbortController();
+
+const response = await fetch('http://localhost:11434/api/generate', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ model, prompt, stream: true }),
+  signal: aiAbortController.signal
+});
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const outputEl = document.getElementById('ai-stream-output');
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const lines = decoder.decode(value).split('\n').filter(Boolean);
+      for (const line of lines) {
+        try {
+          const json = JSON.parse(line);
+          if (json.response) {
+            fullText += json.response;
+            outputEl.innerHTML = fullText
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--text)">$1</strong>')
+  .replace(/^#{1,3} (.*)/gm,
+    '<div style="color:var(--accent-l);font-weight:700;font-size:0.9rem;' +
+    'margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)">$1</div>')
+  .replace(/^\d+\.\s\*\*(.*?)\*\*(.*)/gm,
+    '<div style="margin:12px 0 4px;color:var(--accent-l);font-weight:700">$1</div>' +
+    '<div style="color:var(--text);padding-left:12px">$2</div>')
+  .replace(/^\d+\.\s(.*)/gm,
+    '<div style="margin:8px 0;color:var(--text);padding-left:8px">$1</div>')
+  .replace(/^[-•]\s(.*)/gm,
+    '<div style="padding:3px 0 3px 16px;color:var(--text)">' +
+    '<span style="color:var(--accent-l);margin-right:6px">›</span>$1</div>')
+  .replace(/\n\n/g, '<div style="height:8px"></div>')
+  .replace(/\n/g, '<br>');
+          }
+        } catch { /* skip malformed chunks */ }
+      }
+    }
+
+    btn.textContent = '✨ AI Analyse';
+    btn.disabled = false;
+    showToast('AI analysis complete!');
+
+  } catch (err) {
+    if (err.name === 'AbortError') {
+    return; // silently cancelled, new request is starting
+  }
+    resultsEl.innerHTML += `
+      <p style="color:var(--rose);font-size:0.85rem;margin-top:8px">
+        ⚠️ Error: ${escHtml(err.message)}
+      </p>`;
+    btn.textContent = '✨ AI Analyse';
+    btn.disabled = false;
+  }
+}
+async function aiCheckDraft() {
+  const text = document.getElementById('checker-textarea').value.trim();
+  if (!text) { showToast('Paste your draft text first.'); return; }
+
+  const btn = document.getElementById('ai-checker-btn');
+  const resultsEl = document.getElementById('checker-results');
+
+  // Check Ollama is running
+  try {
+    const ping = await fetch('http://localhost:11434/api/tags');
+    if (!ping.ok) throw new Error();
+  } catch {
+    resultsEl.innerHTML = `
+      <div class="check-block open">
+        <div class="check-block-header">
+          <span class="check-block-title">⚠️ Ollama Not Detected</span>
+        </div>
+        <div class="check-block-body" style="display:block">
+          <p style="line-height:1.7">
+            Install Ollama from <strong>ollama.com</strong> then run:<br><br>
+            <code style="background:var(--bg);padding:4px 8px;border-radius:4px;
+              font-size:0.8rem">ollama pull llama3.2</code><br><br>
+            Once running, click <strong>✨ AI Check</strong> again.
+          </p>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // Check models available
+  const tagsRes = await fetch('http://localhost:11434/api/tags');
+  const { models } = await tagsRes.json();
+  if (!models?.length) {
+    resultsEl.innerHTML = `
+      <div class="check-block open">
+        <div class="check-block-header">
+          <span class="check-block-title">⚠️ No Models Installed</span>
+        </div>
+        <div class="check-block-body" style="display:block">
+          Run <code>ollama pull llama3.2</code> in your terminal then try again.
+        </div>
+      </div>`;
+    return;
+  }
+
+  // Pick model — reuse selectedAiModel if available
+  const preferred = ['llama3.2', 'llama3.2:3b', 'llama3', 'mistral', 'gemma3'];
+  const modelNames = models.map(m => m.name);
+  if (!selectedAiModel || !modelNames.includes(selectedAiModel)) {
+    selectedAiModel = preferred.find(p => modelNames.some(m => m.startsWith(p)))
+      || modelNames[0];
+  }
+  const model = selectedAiModel;
+
+  btn.textContent = '⏳ Checking...';
+  btn.disabled = true;
+
+  // Include brief if one is saved
+  const brief = state.assignment.brief?.trim();
+  const briefSection = brief
+    ? `\nASSIGNMENT BRIEF:\n${brief}\n`
+    : '\n(No assignment brief provided)\n';
+
+  const wordCount = text.trim().split(/\s+/).length;
+
+  resultsEl.innerHTML = `
+    <div style="
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 80px;">
+      <h4 style="
+        color: var(--accent-l);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 4px;">
+        ✨ AI Check — ${model}
+      </h4>
+      <p style="color:var(--muted);font-size:0.75rem;margin-bottom:12px">
+        Analysing ${wordCount.toLocaleString()} words — 
+        Loading ${model}... this may take a moment on first run.
+      </p>
+      <div id="ai-check-output" style="
+        color: var(--text);
+        font-size: 0.875rem;
+        line-height: 1.9;
+        max-height: calc(100vh - 320px);
+        overflow-y: auto;
+        padding-right: 8px;
+        padding-bottom: 12px;">
+        <span style="color:var(--muted)">Reading your draft...</span>
+      </div>
+    </div>`;
+
+  const prompt = `You are an experienced university lecturer giving detailed written feedback on a student's assignment draft.
+${briefSection}
+DRAFT TEXT (${wordCount} words):
+${text}
+
+Analyse the draft and give feedback under exactly these six headings. Be specific — quote directly from the text where helpful. Be honest but constructive.
+
+## 📋 Brief Alignment
+Does the draft answer the question? Are all parts of the brief addressed? Flag anything missing or off-topic.
+
+## 🎓 Academic Tone & Language
+Flag any informal phrases, contractions, first-person overuse, or vague language. Quote specific examples and suggest improvements. Also flag if the writing feels impersonal or generic with no distinct academic voice — students sometimes over-rely on AI tools and this flattens their writing.
+
+## 💬 Argument & Structure
+Is the argument logical, coherent and well-developed? Does each paragraph have a clear point? Does the introduction set up what the conclusion delivers?
+
+## 🔗 Cohesion & Flow
+Are there abrupt topic changes? Missing transitions? Does it read as one coherent piece or a list of disconnected points?
+
+## 📚 Citation Gaps
+Identify specific claims or statements that need a source but don't have one. Quote the exact phrase and explain why it needs a citation.
+
+## ⭐ Overall Feedback & Grade Estimate
+Write 3-4 sentences summarising the main strengths and weaknesses. End with an estimated UK grade band (First, 2:1, 2:2, Third) and one specific thing that would move it up a grade.`;
+
+  // Abort any previous request
+  if (aiAbortController) aiAbortController.abort();
+  aiAbortController = new AbortController();
+
+  try {
+    const response = await fetch('http://localhost:11434/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, prompt, stream: true }),
+      signal: aiAbortController.signal
+    });
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const outputEl = document.getElementById('ai-check-output');
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const lines = decoder.decode(value).split('\n').filter(Boolean);
+      for (const line of lines) {
+        try {
+          const json = JSON.parse(line);
+          if (json.response) {
+            fullText += json.response;
+            outputEl.innerHTML = fullText
+              .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+              .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--text)">$1</strong>')
+              .replace(/^## (.*)/gm,
+                '<div style="color:var(--accent-l);font-weight:700;font-size:0.9rem;' +
+                'margin:20px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--border)">$1</div>')
+              .replace(/^[-•]\s(.*)/gm,
+                '<div style="padding:3px 0 3px 16px;color:var(--text)">' +
+                '<span style="color:var(--accent-l);margin-right:6px">›</span>$1</div>')
+              .replace(/^> (.*)/gm,
+                '<div style="border-left:3px solid var(--accent);padding:4px 0 4px 12px;' +
+                'color:var(--muted);font-style:italic;margin:6px 0">$1</div>')
+              .replace(/\n\n/g, '<div style="height:8px"></div>')
+              .replace(/\n/g, '<br>');
+          }
+        } catch { /* skip malformed chunks */ }
+      }
+    }
+
+    btn.textContent = '✨ AI Check';
+    btn.disabled = false;
+    showToast('AI check complete!');
+
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    resultsEl.innerHTML += `
+      <p style="color:var(--rose);font-size:0.85rem;margin-top:8px">
+        ⚠️ Error: ${escHtml(err.message)}
+      </p>`;
+    btn.textContent = '✨ AI Check';
+    btn.disabled = false;
+  }
 }
 
 // ─── File upload ──────────────────────────────────────────────────────────────
@@ -370,37 +854,19 @@ async function handleBriefUpload() {
 
 // ─── Outline ──────────────────────────────────────────────────────────────────
 function addSection(title = 'New Section', words = 200) {
-  const id = Date.now().toString();
+  const id = crypto.randomUUID();
   state.outline.push({ id, title, words });
   if (!state.notes[id]) state.notes[id] = { content: '', citations: [] };
   renderOutline();
   scheduleSave();
 }
-
-function loadTemplate(type) {
-  if (!TEMPLATES[type]) return;
-  if (state.outline.length && !confirm('Replace current outline with this template?')) return;
-  const total = state.assignment.totalWords || 2000;
-  state.outline = TEMPLATES[type].map(s => ({
-    id: Date.now().toString() + Math.random(),
-    title: s.title,
-    words: Math.round(total * s.pct / 100)
-  }));
-  state.outline.forEach(s => {
-    if (!state.notes[s.id]) state.notes[s.id] = { content: '', citations: [] };
-  });
-  // Reset active notes section since outline changed
-// end of loadTemplate(...)
-activeNotesSection = state.outline.length ? state.outline[0].id : null;
-renderOutline();
-scheduleSave();
-function loadTemplate(type) {
+ function loadTemplate(type) {
   if (!TEMPLATES[type]) return;
   if (state.outline.length && !confirm('Replace current outline with this template?')) return;
 
   const total = state.assignment.totalWords || 2000;
   state.outline = TEMPLATES[type].map(s => ({
-    id: Date.now().toString() + Math.random().toString(16).slice(2),
+  id: crypto.randomUUID(),
     title: s.title,
     words: Math.round(total * s.pct / 100)
   }));
@@ -421,7 +887,7 @@ function loadTemplate(type) {
     else window.focus();
   }, 0);
 }
-}
+
 function renderOutline() {
   const list = document.getElementById('outline-list');
   list.innerHTML = '';
@@ -628,7 +1094,8 @@ function addCitation() {
   const pub    = document.getElementById('cite-pub').value.trim();
   if (!author || !year || !title) return;
 
-  state.notes[activeNotesSection].citations.push({ id: Date.now().toString(), author, year, title, pub });
+  state.notes[activeNotesSection].citations.push({
+  id: crypto.randomUUID(), author, year, title, pub });
   scheduleSave();
   ['cite-author','cite-year','cite-title','cite-pub'].forEach(id =>
     document.getElementById(id).value = '');
@@ -1440,7 +1907,7 @@ function initChecker() {
   const runBtn  = document.getElementById('checker-run-btn');
   const textarea = document.getElementById('checker-textarea');
     if (!runBtn || !textarea) return;
-  
+
     // Update meta on input
       textarea.addEventListener('input', updateCheckerMeta);
     
@@ -1677,6 +2144,11 @@ function showToast(msg, duration = 2500) {
     `;
     document.body.appendChild(toast);
   }
+  window.addEventListener('unhandledrejection', event => {
+  console.error('[Assignment Desk] Unhandled promise rejection:', event.reason);
+  showToast('Something went wrong. Check the console for details.');
+});
+  
   toast.textContent = msg;
   toast.style.opacity = '1';
   clearTimeout(toast._t);
@@ -1688,6 +2160,8 @@ const _wcToggle = document.getElementById('wc-toggle');
 if (_wcToggle && _wcPanel) {
   _wcToggle.addEventListener('click', () => _wcPanel.classList.toggle('open'));
 }
-
+window.api.onSaveError(msg => {
+  showToast('⚠️ Save failed: ' + msg);
+});
 // ─── Start ────────────────────────────────────────────────────────────────────
 init();

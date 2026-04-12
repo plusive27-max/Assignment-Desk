@@ -1,6 +1,30 @@
 # 📚 Assignment Desk
 
-A desktop app built with Electron to help students plan, write, and track their assignments — all in one place, offline, with no accounts required.
+A desktop app built with Electron to help students plan, write, and track their assignments — all in one place, offline, with no accounts required. Now with optional **local AI analysis** powered by Ollama — no data ever leaves your machine.
+
+[![GitHub release](https://img.shields.io/github/v/release/plusive27-max/Assignment-Desk?style=for-the-badge&color=6c8ef5&label=Download)](https://github.com/plusive27-max/Assignment-Desk/releases/latest)
+![Platform](https://img.shields.io/badge/platform-Windows-blue?style=for-the-badge&logo=windows)
+![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)
+![Electron](https://img.shields.io/badge/built%20with-Electron-47848f?style=for-the-badge&logo=electron)
+![AI](https://img.shields.io/badge/AI-Ollama%20local%20LLM-blueviolet?style=for-the-badge)
+![Status](https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge)
+![PRs Welcome](https://img.shields.io/badge/PRs-welcome-orange?style=for-the-badge)
+
+---
+
+## 📑 Table of Contents
+
+- [Features](#-features)
+- [AI Features](#-ai-features-optional)
+- [Download & Install](#-download--install)
+- [Requirements](#-requirements)
+- [Getting Started (Developers)](#-getting-started-developers)
+- [Build a Distributable](#-build-a-distributable)
+- [Data & Privacy](#-data--privacy)
+- [Project Structure](#-project-structure)
+- [UI Tips](#-ui-tips)
+- [Built With](#-built-with)
+- [Licence](#-licence)
 
 
 [![GitHub release](https://img.shields.io/github/v/release/plusive27-max/Assignment-Desk?style=for-the-badge&color=6c8ef5&label=Download)](https://github.com/plusive27-max/Assignment-Desk/releases/latest)
@@ -12,31 +36,75 @@ A desktop app built with Electron to help students plan, write, and track their 
 
 | Tab | What it does |
 |-----|-------------|
-| **Brief** | Paste or upload your assignment brief (PDF/DOCX). Detects instruction verbs (analyse, evaluate, discuss…) and suggests a word-count split. |
+| **Brief** | Paste or upload your assignment brief (PDF/DOCX). Detects instruction verbs (analyse, evaluate, discuss…), suggests a smart word-count split, and auto-detects word count from the brief text. |
+| **Brief → ✨ AI Analyse** | Uses a local LLM via Ollama to deeply analyse your brief — identifies assignment type, instruction verbs, core requirements, suggested structure, and common mistakes to avoid. Streams live. Optional. |
 | **Outline** | Build your section structure. Apply essay/report/lit review/case study templates. Drag to reorder. Allocates your total word count across sections. |
 | **Notes** | Per-section research notes and citations. Push note word counts to Progress in one click. |
 | **Progress** | Track words written per section. Paste & Count panel lets you paste a draft and live-count words, then apply the count to any section. |
 | **Checklist** | 18-point submission checklist covering brief understanding, citations, proofreading, and submission readiness. |
 | **Preview** | Clean preview of your full assignment — all sections, notes, and references in one view. |
 | **References** | Format references in Solent Harvard, Harvard, APA 7th, MLA 9th, Vancouver, OSCOLA, or Chicago. Pulls all citations from your Notes automatically. |
-| **Checker** | Paste a draft and run an analysis: quote balance, repeated phrases, sentence complexity, AI-phrase detection, passive voice, and readability score. |
+| **Checker** | Paste a draft and run a rule-based analysis: quote balance, repeated phrases, sentence complexity, passive voice, and readability score. |
+| **Checker → ✨ AI Check** | Uses a local LLM to give deep written feedback across 6 areas: brief alignment, academic tone, argument structure, cohesion, citation gaps, and an overall grade estimate with UK grade band. |
 | **Pomodoro** | Built-in floating Pomodoro timer (25 min focus / 5 min short break / 15 min long break). |
+
+---
+
+## 🤖 AI Features (Optional)
+
+The AI features are completely optional and require [Ollama](https://ollama.com) to be installed separately. **All AI processing happens locally on your machine — no data is sent to any server.**
+
+### Setup (one time only)
+
+1. Download and install **Ollama** from [ollama.com](https://ollama.com) — one-click installer
+2. Open a terminal and run:
+   ```bash
+   ollama pull llama3.2
+   ```
+3. That's it — open Assignment Desk and the **✨ AI Analyse** and **✨ AI Check** buttons will work automatically
+
+### Recommended Models
+
+| Model | Size | Speed | Quality |
+|-------|------|-------|---------|
+| `llama3.2:3b` | ~2GB | Fast | Good |
+| `llama3.2` (8b) | ~5GB | Medium | Better |
+| `mistral` | ~4GB | Medium | Great for academic text |
+
+> **First run on a new model is slower** — Ollama needs to load it into RAM. Subsequent runs on the same model are much faster.
+
+If Ollama isn't installed or running, the app works exactly as before — the AI buttons will show setup instructions inline instead of crashing.
 
 ---
 
 ## 🖥️ Requirements
 
-- [Node.js](https://nodejs.org/) v18 or later
 - Windows 10/11 (primary target — macOS/Linux should work but untested)
+- [Node.js](https://nodejs.org/) v18 or later *(for running from source only)*
+- [Ollama](https://ollama.com) *(optional — for AI features only)*
 
 ---
+
 ## 📥 Download & Install
 
 > **Just want to use the app? No coding required.**
 
 Head to the [Releases page](../../releases/latest) and download the latest
 `Assignment-Desk-Setup-x.x.x.exe` — run it and you're done. No account,
-no internet connection, no data ever leaves your machine.
+no internet connection required, no data ever leaves your machine.
+
+### 🤖 Want to use the AI features?
+
+The AI Brief Analyser and AI Checker are optional but highly recommended. They require [Ollama](https://ollama.com) — a free, lightweight tool that runs AI models locally on your machine.
+
+1. Download and install **Ollama** from [ollama.com](https://ollama.com)
+2. Open a terminal (search **cmd** in the Start menu) and run:
+   ```bash
+   ollama pull llama3.2
+   ```
+3. That's it — reopen Assignment Desk and the **✨ AI Analyse** and **✨ AI Check** buttons will work automatically
+
+> **Your text never leaves your machine.** All AI processing runs locally via Ollama — no internet connection needed, no API keys, no subscriptions.
 
 ### ⚠️ Windows SmartScreen warning
 
@@ -47,11 +115,9 @@ isn't commercially code-signed. It is safe to proceed:
 1. Click **More info**
 2. Click **Run anyway**
 
-### For developers
+---
 
-If you want to run from source or build it yourself, see the
-[Getting Started](#-getting-started) section below. 
-## 🚀 Getting Started
+## 🚀 Getting Started (Developers)
 
 ### 1. Clone the repo
 
@@ -74,7 +140,7 @@ npm start
 
 ---
 
-## 📦 Build a distributable
+## 📦 Build a Distributable
 
 Produces a Windows `.exe` installer in the `dist/` folder:
 
@@ -88,12 +154,13 @@ Requires `electron-builder` (already listed as a dev dependency).
 
 ## 💾 Data & Privacy
 
-- All data is stored **locally** on your machine — nothing is sent anywhere.
+- All data is stored **locally** on your machine — nothing is sent anywhere, ever.
 - Auto-save writes to Electron's `userData` folder:
   - **Windows:** `C:\Users\<you>\AppData\Roaming\Assignment Desk\assignment-desk-data.json`
 - Use **Export JSON** to back up your assignment to a file of your choice.
 - Use **Export PDF** to generate a formatted PDF of your assignment.
 - Use **Import** to load a previously exported JSON file.
+- AI analysis runs entirely on your local machine via Ollama — your text never leaves.
 
 ---
 
@@ -103,7 +170,7 @@ Requires `electron-builder` (already listed as a dev dependency).
 assignment-desk/
 ├── main.js          # Electron main process — IPC, PDF export, file handling
 ├── preload.js       # Context bridge — exposes safe API to renderer
-├── renderer.js      # All UI logic — state, views, event listeners
+├── renderer.js      # All UI logic — state, views, AI features, event listeners
 ├── index.html       # App shell and all view markup
 ├── print.html       # Hidden print window used for PDF generation
 ├── style.css        # All styles — dark/light mode, components
@@ -112,13 +179,14 @@ assignment-desk/
 
 ---
 
-## ⌨️ Keyboard & UI Tips
+## ⌨️ UI Tips
 
 - Switch between **dark and light mode** using the toggle button (☀️/🌙) in the top bar.
 - Click the **Pomodoro panel header** to minimise/expand it — it floats over all tabs.
 - In **Outline**, drag the `⠿` handle to reorder sections.
 - In **Notes**, use the search box to filter sections by keyword.
 - In **Progress → Paste & Count**, click the panel header to expand it, paste your draft, choose a section, and click **Apply Count**.
+- The **✨ AI Analyse** button in Brief and **✨ AI Check** in Checker share the same model selection — pick your model once and it carries across both features.
 
 ---
 
@@ -128,6 +196,7 @@ assignment-desk/
 - [electron-builder](https://www.electron.build/)
 - [pdf-parse](https://www.npmjs.com/package/pdf-parse) — reads PDF briefs
 - [mammoth](https://www.npmjs.com/package/mammoth) — reads DOCX briefs
+- [Ollama](https://ollama.com) *(optional)* — local LLM inference for AI features
 - Vanilla JavaScript, HTML, CSS — no frontend framework
 
 ---
