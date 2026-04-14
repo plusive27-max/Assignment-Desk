@@ -26,10 +26,6 @@ A desktop app built with Electron to help students plan, write, and track their 
 - [Built With](#-built-with)
 - [Licence](#-licence)
 
-
-[![GitHub release](https://img.shields.io/github/v/release/plusive27-max/Assignment-Desk?style=for-the-badge&color=6c8ef5&label=Download)](https://github.com/plusive27-max/Assignment-Desk/releases/latest)
-![Platform](https://img.shields.io/badge/platform-Windows-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
 ---
 
 ## ✨ Features
@@ -37,7 +33,7 @@ A desktop app built with Electron to help students plan, write, and track their 
 | Tab | What it does |
 |-----|-------------|
 | **Brief** | Paste or upload your assignment brief (PDF/DOCX). Detects instruction verbs (analyse, evaluate, discuss…), suggests a smart word-count split, and auto-detects word count from the brief text. |
-| **Brief → ✨ AI Analyse** | Uses a local LLM via Ollama to deeply analyse your brief — identifies assignment type, instruction verbs, core requirements, suggested structure, and common mistakes to avoid. Streams live. Optional. |
+| **Brief → ✨ AI Analyse** | Uses a local LLM via Ollama to analyse your brief. It extracts assignment type, topic, word count, format, key requirements, and a recommended structure. You can re-run it after changing models. |
 | **Outline** | Build your section structure. Apply essay/report/lit review/case study templates. Drag to reorder. Allocates your total word count across sections. |
 | **Notes** | Per-section research notes and citations. Push note word counts to Progress in one click. |
 | **Progress** | Track words written per section. Paste & Count panel lets you paste a draft and live-count words, then apply the count to any section. |
@@ -45,7 +41,8 @@ A desktop app built with Electron to help students plan, write, and track their 
 | **Preview** | Clean preview of your full assignment — all sections, notes, and references in one view. |
 | **References** | Format references in Solent Harvard, Harvard, APA 7th, MLA 9th, Vancouver, OSCOLA, or Chicago. Pulls all citations from your Notes automatically. |
 | **Checker** | Paste a draft and run a rule-based analysis: quote balance, repeated phrases, sentence complexity, passive voice, and readability score. |
-| **Checker → ✨ AI Check** | Uses a local LLM to give deep written feedback across 6 areas: brief alignment, academic tone, argument structure, cohesion, citation gaps, and an overall grade estimate with UK grade band. |
+| **Checker → ✨ AI Check** | Uses a local LLM to give structured feedback across 6 areas: brief alignment, academic tone, argument structure, cohesion, citation gaps, and an overall grade estimate with UK grade band. |
+| **Draft** | Uses your outline to generate section drafts. Starter mode writes opening paragraphs; Full Draft writes the full section text. |
 | **Pomodoro** | Built-in floating Pomodoro timer (25 min focus / 5 min short break / 15 min long break). |
 
 ---
@@ -56,24 +53,33 @@ The AI features are completely optional and require [Ollama](https://ollama.com)
 
 ### Setup (one time only)
 
-1. Download and install **Ollama** from [ollama.com](https://ollama.com) — one-click installer
-2. Open a terminal and run:
+1. Download and install **Ollama** from [ollama.com](https://ollama.com).
+2. Open a terminal and pull a model:
    ```bash
    ollama pull llama3.2
    ```
-3. That's it — open Assignment Desk and the **✨ AI Analyse** and **✨ AI Check** buttons will work automatically
+3. Open Assignment Desk and use **✨ AI Analyse** or **✨ AI Check**.
 
 ### Recommended Models
 
-| Model | Size | Speed | Quality |
-|-------|------|-------|---------|
-| `llama3.2:3b` | ~2GB | Fast | Good |
-| `llama3.2` (8b) | ~5GB | Medium | Better |
-| `mistral` | ~4GB | Medium | Great for academic text |
+| Model | Best for | Speed | Notes |
+|-------|----------|-------|-------|
+| `qwen2.5-coder:7b` | Best overall for this app | Fast | Strong instruction following, good with structured output |
+| `llama3.2:3b` | Quick local checks | Fast | Good for lighter machines |
+| `llama3.2` | Balanced use | Medium | Better quality than 3b |
+| `mistral` | Academic-style text | Medium | Solid general model |
+| `codellama:13b` | Only if you have enough RAM/VRAM | Slow | Can struggle with long structured prompts |
 
-> **First run on a new model is slower** — Ollama needs to load it into RAM. Subsequent runs on the same model are much faster.
+> **Tip:** If a model starts “waffling”, use a smaller, cleaner prompt task. The app already does this automatically for weaker models.
 
-If Ollama isn't installed or running, the app works exactly as before — the AI buttons will show setup instructions inline instead of crashing.
+### Model Tips
+
+- Use **qwen2.5-coder:7b** for the best balance of structure and quality.
+- Use **llama3.2:3b** if your PC is limited and you want faster responses.
+- Avoid very large models if they keep drifting into long introductions or mixed formatting.
+- The app now keeps AI output in the right place, strips stray references from draft sections, and collects them at the end of the draft.
+
+If Ollama isn't installed or running, the app works normally — the AI buttons show inline setup guidance instead of crashing.
 
 ---
 
@@ -89,28 +95,24 @@ If Ollama isn't installed or running, the app works exactly as before — the AI
 
 > **Just want to use the app? No coding required.**
 
-Head to the [Releases page](../../releases/latest) and download the latest
-`Assignment-Desk-Setup-x.x.x.exe` — run it and you're done. No account,
-no internet connection required, no data ever leaves your machine.
+Head to the [Releases page](../../releases/latest) and download the latest `Assignment-Desk-Setup-x.x.x.exe` — run it and you're done. No account, no internet connection required, no data ever leaves your machine.
 
 ### 🤖 Want to use the AI features?
 
-The AI Brief Analyser and AI Checker are optional but highly recommended. They require [Ollama](https://ollama.com) — a free, lightweight tool that runs AI models locally on your machine.
+The AI Brief Analyser, AI Checker, and Draft assistant are optional but highly recommended. They require [Ollama](https://ollama.com) — a free, lightweight tool that runs AI models locally on your machine.
 
-1. Download and install **Ollama** from [ollama.com](https://ollama.com)
-2. Open a terminal (search **cmd** in the Start menu) and run:
+1. Download and install **Ollama** from [ollama.com](https://ollama.com).
+2. Open a terminal and run:
    ```bash
-   ollama pull llama3.2
+   ollama pull qwen2.5-coder:7b
    ```
-3. That's it — reopen Assignment Desk and the **✨ AI Analyse** and **✨ AI Check** buttons will work automatically
+3. Reopen Assignment Desk and use the **✨ AI Analyse**, **✨ AI Check**, or **Draft** tools.
 
 > **Your text never leaves your machine.** All AI processing runs locally via Ollama — no internet connection needed, no API keys, no subscriptions.
 
 ### ⚠️ Windows SmartScreen warning
 
-When you first run the installer, Windows may show a
-**"Windows protected your PC"** popup. This happens with any app that
-isn't commercially code-signed. It is safe to proceed:
+When you first run the installer, Windows may show a **"Windows protected your PC"** popup. This happens with any app that isn't commercially code-signed. It is safe to proceed:
 
 1. Click **More info**
 2. Click **Run anyway**
@@ -187,6 +189,7 @@ assignment-desk/
 - In **Notes**, use the search box to filter sections by keyword.
 - In **Progress → Paste & Count**, click the panel header to expand it, paste your draft, choose a section, and click **Apply Count**.
 - The **✨ AI Analyse** button in Brief and **✨ AI Check** in Checker share the same model selection — pick your model once and it carries across both features.
+- For Draft, use **Starter** when you want short opening paragraphs and **Full Draft** when you want the whole section generated.
 
 ---
 

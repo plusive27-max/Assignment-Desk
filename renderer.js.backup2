@@ -329,27 +329,10 @@ function analyseBrief() {
     </div>
   `;
 
-  const applyBtn = document.getElementById('apply-structure-btn');
-  if (applyBtn) {
-    applyBtn.addEventListener('click', async () => {
-      if (state.outline.length) {
-        const ok = await appConfirm('This will replace your current outline with the suggested structure. Continue?');
-        if (!ok) return;
-      }
-      const total = state.assignment.totalWords || 2000;
-      state.outline = structureItems.map(s => ({
-        id:    crypto.randomUUID(),
-        title: s.title,
-        words: Math.round(total * s.pct / 100)
-      }));
-      state.outline.forEach(s => { if (!state.notes[s.id]) state.notes[s.id] = { content: '', citations: [] }; });
-      activeNotesSection = state.outline[0]?.id || null;
-      renderOutline();
-      scheduleSave();
-      showToast('✅ Outline applied!');
-      document.querySelector('[data-view="outline"]').click();
-    });
-  }
+  document.getElementById('apply-structure-btn')?.addEventListener('click', () => {
+    loadTemplate('essay');
+    document.querySelector('[data-view="outline"]').click();
+  });
 }
 
 // ─── File upload ──────────────────────────────────────────────────────────────
@@ -1729,15 +1712,12 @@ async function ollamaGetModels() {
   } catch { return []; }
 }
 
-let _streamCounter = 0;
 function ollamaStream(model, prompt, onChunk, onDone, onError) {
-  const streamId = ++_streamCounter;
-  // Clean up chunk listeners from previous streams
-  window.api.removeAllOllamaListeners();
-  window.api.onOllamaChunk(streamId, onChunk);
-  window.api.onOllamaDone(streamId,  onDone);
-  window.api.onOllamaError(streamId, onError);
-  window.api.ollamaStream(model, prompt, streamId);
+  window.api.removeOllamaListeners();
+  window.api.onOllamaChunk(onChunk);
+  window.api.onOllamaDone(onDone);
+  window.api.onOllamaError(onError);
+  window.api.ollamaStream(model, prompt);
 }
 
 function renderMarkdown(text) {
@@ -1780,87 +1760,30 @@ async function analyseBriefWithAI() {
       <select id="ai-model-sel" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:var(--radius);font:inherit;font-size:0.8rem">
         ${models.map(n => `<option value="${n}"${n===selectedAiModel?' selected':''}>${n}</option>`).join('')}
       </select>
-      <button id="ai-rerun-btn" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:var(--radius);font:inherit;font-size:0.75rem;cursor:pointer;white-space:nowrap;flex-shrink:0">🔄 Re-run</button>
     </div>
     <div id="ai-out" style="font-size:0.875rem;line-height:1.9;color:var(--text)"><span style="color:var(--muted)">Thinking…</span></div>
   </div>`;
 
   document.getElementById('ai-model-sel')?.addEventListener('change', e => { selectedAiModel = e.target.value; });
-  document.getElementById('ai-rerun-btn')?.addEventListener('click', analyseBriefWithAI);
 
-  const prompt = `You are an academic assignment analyst. Extract and summarise the KEY INFORMATION from this brief. Do NOT write any essay content, drafts, or references.
+  const prompt = `You are an academic writing assistant. Analyse this assignment brief and respond with these sections:
+1. Assignment Type
+2. Key Instruction Verbs — list each verb and what it requires
+3. Core Requirements — bullet points of everything to cover
+4. Suggested Structure — section headings with word % (total: ${state.assignment.totalWords||2000} words)
+5. Mistakes to Avoid — 2-3 specific warnings
 
-Respond with ONLY these sections:
+Be concise and practical. No waffle.
 
-📋 ASSIGNMENT OVERVIEW
-- Type: (essay / report / literature review / case study / etc.)
-- Topic: (one sentence)
-- Word count: (extract from brief, or state "not specified")
-- Deadline: (if mentioned)
-- Module/Subject: (if mentioned)
-
-🎯 WHAT YOU MUST DO
-List every task, question, or requirement as bullet points. Be specific.
-
-📝 KEY INSTRUCTION VERBS
-For each command verb found, state exactly what it demands.
-
-📐 RECOMMENDED STRUCTURE
-Suggest section headings with approximate word counts that add up to ${state.assignment.totalWords||2000} words total. Format as:
-- Section name (~X words)
-
-⚠️ COMMON MISTAKES TO AVOID
-2-3 specific pitfalls for THIS type of assignment.
-
-ASSIGNMENT BRIEF:
-${text}
-
-Remember: analyse and extract only. Do not write any content.`;
+BRIEF:
+${text}`;
 
   const out = document.getElementById('ai-out');
   let full = '';
   out.innerHTML = '';
   ollamaStream(selectedAiModel, prompt,
     chunk => { full += chunk; out.innerHTML = renderMarkdown(full); },
-    ()    => {
-      showToast('✅ Analysis complete!');
-      btn.textContent = '✨ AI Analyse';
-      btn.disabled = false;
-      // Add Apply Structure button at the bottom of AI output
-      const applyAiBtn = document.createElement('button');
-      applyAiBtn.className = 'btn-primary';
-      applyAiBtn.style.cssText = 'margin-top:16px;width:100%;font-size:0.8rem';
-      applyAiBtn.textContent = '📐 Apply Recommended Structure to Outline';
-      out.after(applyAiBtn);
-      applyAiBtn.addEventListener('click', async () => {
-        // Parse sections from the AI output text (lines starting with "- " under STRUCTURE)
-        const lines = full.split('\n');
-        const structStart = lines.findIndex(l => l.includes('RECOMMENDED STRUCTURE') || l.includes('Recommended Structure'));
-        const structEnd   = lines.findIndex((l, i) => i > structStart && l.trim().startsWith('#') || (i > structStart + 1 && l.trim() === ''));
-        const structLines = lines.slice(structStart + 1, structEnd > structStart ? structEnd : structStart + 15)
-          .filter(l => l.trim().startsWith('-') && l.includes('~'));
-        const parsed = structLines.map(l => {
-          const match = l.match(/-\s*(.+?)\s*\(~?(\d+)/);
-          return match ? { title: match[1].trim(), words: parseInt(match[2]) } : null;
-        }).filter(Boolean);
-        const items = parsed.length >= 2 ? parsed
-          : [{ title: 'Introduction', words: Math.round((state.assignment.totalWords||2000)*0.1) },
-             { title: 'Main Body',    words: Math.round((state.assignment.totalWords||2000)*0.7) },
-             { title: 'Conclusion',   words: Math.round((state.assignment.totalWords||2000)*0.2) }];
-        if (state.outline.length) {
-          const ok = await appConfirm('Apply ' + items.length + ' sections to your outline? This replaces your current outline.');
-          if (!ok) return;
-        }
-        state.outline = items.map(s => ({ id: crypto.randomUUID(), title: s.title, words: s.words }));
-        state.outline.forEach(s => { if (!state.notes[s.id]) state.notes[s.id] = { content: '', citations: [] }; });
-        activeNotesSection = state.outline[0]?.id || null;
-        renderOutline();
-        scheduleSave();
-        applyAiBtn.textContent = '✅ Applied! Go to Outline tab to review';
-        applyAiBtn.disabled = true;
-        showToast('✅ ' + items.length + ' sections applied to outline!');
-      });
-    },
+    ()    => { showToast('✅ Analysis complete!'); btn.textContent = '✨ AI Analyse'; btn.disabled = false; },
     err   => { out.innerHTML = `<span style="color:var(--rose)">Error: ${escHtml(err)}</span>`; btn.textContent = '✨ AI Analyse'; btn.disabled = false; }
   );
 }
@@ -1889,69 +1812,32 @@ async function aiCheckDraft() {
   btn.textContent = '⏳ Checking…';
   btn.disabled    = true;
 
-  // Build output elements directly — avoids getElementById stale-reference bug
-  const outDiv = document.createElement('div');
-  outDiv.style.cssText = 'font-size:0.875rem;line-height:1.9;color:var(--text)';
-  outDiv.innerHTML = '<span style="color:var(--muted)">Reading draft…</span>';
+  resultsEl.innerHTML = `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+    <h4 style="color:var(--accent-l);font-size:0.8rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px">AI Feedback — ${selectedAiModel}</h4>
+    <p style="color:var(--muted);font-size:0.75rem;margin-bottom:12px">Analysing ${wordCount.toLocaleString()} words…</p>
+    <div id="check-out" style="font-size:0.875rem;line-height:1.9;color:var(--text)"><span style="color:var(--muted)">Reading draft…</span></div>
+  </div>`;
 
-  const modelRow = document.createElement('div');
-  modelRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:10px';
-  modelRow.innerHTML = `<span style="font-size:0.75rem;color:var(--muted)">Model:</span>
-    <select id="check-model-sel" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:var(--radius);font:inherit;font-size:0.8rem">
-      ${models.map(n => `<option value="${n}"${n===selectedAiModel?' selected':''}>${n}</option>`).join('')}
-    </select>
-    <button id="check-rerun-btn" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:var(--radius);font:inherit;font-size:0.75rem;cursor:pointer;white-space:nowrap">🔄 Re-run</button>`;
+  const prompt = `You are a university lecturer giving feedback on a student's draft.
+${brief ? 'BRIEF: ' + brief + '\n' : ''}
+DRAFT (${wordCount} words):
+${text}
 
-  const wrapper = document.createElement('div');
-  wrapper.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px';
-  const meta = document.createElement('p');
-  meta.style.cssText = 'color:var(--muted);font-size:0.75rem;margin:0 0 12px';
-  meta.textContent = `AI Feedback · ${wordCount.toLocaleString()} words · ${selectedAiModel}`;
-  wrapper.appendChild(modelRow);
-  wrapper.appendChild(meta);
-  wrapper.appendChild(outDiv);
-  resultsEl.innerHTML = '';
-  resultsEl.appendChild(wrapper);
+Give feedback under these six headings:
+1. Brief Alignment — does it answer the question?
+2. Academic Tone — flag informal language with examples
+3. Argument & Structure — is the argument logical?
+4. Cohesion & Flow — transitions and readability
+5. Citation Gaps — specific claims needing sources
+6. Overall & Grade Estimate — 3-4 sentences + UK grade band (First/2:1/2:2/Third)`;
 
-  document.getElementById('check-model-sel')?.addEventListener('change', e => { selectedAiModel = e.target.value; });
-  document.getElementById('check-rerun-btn')?.addEventListener('click', aiCheckDraft);
-
-  const prompt = `You are a strict academic checker. Return ONLY direct feedback on the student's draft.
-
-Rules:
-- Do NOT invent a persona, greeting, signature, or commentary.
-- Do NOT write as a teacher, lecturer, or named person.
-- Do NOT add "Dear student" or any salutation.
-- Do NOT include markdown headings beyond the six required sections.
-- Do NOT mention references unless you are pointing out missing citations in the draft.
-- Be factual, concise, and specific.
-
-Use exactly these six headings and nothing else:
-1. Brief Alignment
-2. Academic Tone
-3. Argument & Structure
-4. Cohesion & Flow
-5. Citation Gaps
-6. Overall & Grade Estimate
-
-For each heading:
-- Use 2-5 bullet points.
-- Quote short phrases from the draft when giving examples.
-- If a section is weak, say exactly why.
-- End with a short overall grade band only in the last heading.
-
-BRIEF:
-${brief || 'Not provided'}
-
-DRAFT:
-${text}`;
-
-  let full = '';
-  outDiv.innerHTML = '';
+  const out  = document.getElementById('check-out');
+  let full   = '';
+  out.innerHTML = '';
   ollamaStream(selectedAiModel, prompt,
-    chunk => { full += chunk; outDiv.innerHTML = renderMarkdown(full); },
+    chunk => { full += chunk; out.innerHTML = renderMarkdown(full); },
     ()    => { showToast('✅ Check complete!'); btn.textContent = '✨ AI Check'; btn.disabled = false; },
-    err   => { outDiv.innerHTML = `<span style="color:var(--rose)">Error: ${escHtml(err)}</span>`; btn.textContent = '✨ AI Check'; btn.disabled = false; }
+    err   => { out.innerHTML = `<span style="color:var(--rose)">Error: ${escHtml(err)}</span>`; btn.textContent = '✨ AI Check'; btn.disabled = false; }
   );
 }
 
@@ -1997,7 +1883,7 @@ async function generateDraft() {
   const output    = document.getElementById('draft-output');
   const total     = state.outline.length;
   let   stopped   = false;
-  window._draftStop = () => { stopped = true; window.api.removeAllOllamaListeners(); stopBtn.style.display = 'none'; genBtn.style.display = ''; };
+  window._draftStop = () => { stopped = true; window.api.removeOllamaListeners(); stopBtn.style.display = 'none'; genBtn.style.display = ''; };
   genBtn.style.display = 'none';
   stopBtn.style.display = '';
 
@@ -2032,37 +1918,13 @@ async function generateDraft() {
     bodyEl.innerHTML   = '<span style="color:var(--muted);font-size:0.8rem">⏳ Generating…</span>';
     bodyEl.style.fontStyle = 'italic';
 
-    // Simpler prompt for code/instruct models that struggle with complex instructions
-    const isSimpleModel = /codellama|starcoder|deepseek-coder|phi|tinyllama|orca/i.test(model);
     const prompt = isFull
-      ? isSimpleModel
-        ? `Write ${s.words} words of academic body text for a section called "${s.title}" in an assignment titled "${state.assignment.title||'Untitled'}". No headings. No references. Just paragraphs.${note ? ' Notes: '+note : ''}`
-        : `Write the body text for the "${s.title}" section of an academic assignment.
-
-Assignment: ${state.assignment.title||'Untitled'}
-Target length: ${s.words} words
-${state.assignment.brief ? 'Brief: '+state.assignment.brief+'\n' : ''}${note ? 'Student notes for this section: '+note+'\n' : ''}
-STRICT RULES:
-- Do NOT include any headings, sub-headings, or the section title itself
-- Do NOT write a reference list, bibliography, or list of sources at the end
-- Do NOT include in-text citations like (Author, 2023)
-- Do NOT start with "In this section..." or restate what you will do
-- Write ONLY the body paragraphs — flowing academic prose
-- Stay within ${s.words} words
-- Use formal academic English throughout`
-      : isSimpleModel
-        ? `Write one opening paragraph for "${s.title}" in an assignment called "${state.assignment.title||'Untitled'}". About ${Math.round(s.words*0.2)} words. No headings. No references.${note ? ' Notes: '+note : ''}`
-        : `Write ONE opening paragraph for the "${s.title}" section of an academic assignment.
-
-Assignment: ${state.assignment.title||'Untitled'}
-Target: ~${Math.round(s.words*0.2)} words
-${note ? 'Student notes: '+note+'\n' : ''}
-RULES:
-- ONE paragraph only — no headings, no bullet points, no sub-sections, no references
-- Do NOT include the section title, any heading, or any reference list
-- Formal academic English
-- End with a sentence that leads into the next point
-- Do not include references or a reference list`;
+      ? `Write a complete academic section titled "${s.title}" for an assignment called "${state.assignment.title||'Untitled'}".
+Target: ${s.words} words. ${state.assignment.brief ? 'Brief: '+state.assignment.brief+'\n' : ''}${note ? 'Notes: '+note+'\n' : ''}
+Formal academic English. Full flowing prose, no bullet points, no headings. Do not add commentary.`
+      : `Write one strong opening paragraph for the section "${s.title}" of an assignment called "${state.assignment.title||'Untitled'}".
+About ${Math.round(s.words*0.15)} words. ${note ? 'Notes: '+note+'\n' : ''}
+Formal academic English. End with a linking sentence.`;
 
     await new Promise(resolve => {
       let full = '';
@@ -2083,70 +1945,12 @@ RULES:
     if (stopped) break;
   }
 
-  // ── Post-process: strip references from sections, collect them ───────────────
-  const collectedRefs = [];
-  if (!stopped) {
-    state.outline.forEach((s, i) => {
-      const bodyEl = document.getElementById('db-' + i);
-      if (!bodyEl) return;
-      // Get raw text (strip HTML tags for analysis)
-      const rawHtml = bodyEl.innerHTML;
-      // Detect reference block: lines that look like citations
-      // Pattern: line starting with a number+dot, or author (Year), or URL
-      const lines = rawHtml.replace(/<br>/gi, '\n').replace(/<[^>]+>/g, '').split('\n');
-      const refStart = lines.findIndex((l, idx) => {
-        const t = l.trim();
-        return idx > 3 && (
-          /^\d+\.\s+[A-Z]/.test(t) ||                          // 1. Author...
-          /^[A-Z][a-z]+,\s+[A-Z]/.test(t) ||                   // Smith, J.
-          /^[A-Z][a-z]+\s+\([12]\d{3}\)/.test(t) ||           // Smith (2023)
-          /^https?:\/\//.test(t) ||                             // URL
-          /^References?\s*$/i.test(t) ||                        // "References" heading
-          /^Bibliography\s*$/i.test(t)                           // "Bibliography"
-        );
-      });
-      if (refStart > 2) {
-        const contentLines = lines.slice(0, refStart);
-        const refLines     = lines.slice(refStart).filter(l => l.trim());
-        // Rebuild HTML without refs
-        bodyEl.innerHTML = contentLines.join('<br>').replace(/(<br>)+$/, '');
-        // Collect refs with section label
-        if (refLines.length) {
-          collectedRefs.push({ section: s.title, refs: refLines });
-        }
-      }
-    });
-  }
-
-  // ── Show collected references card ────────────────────────────────────────────
-  if (collectedRefs.length) {
-    const refCard = document.createElement('div');
-    refCard.className = 'draft-section-card';
-    refCard.style.cssText = 'border-color:var(--accent);margin-top:8px';
-    const allRefs = [...new Set(collectedRefs.flatMap(r => r.refs))]; // deduplicate
-    refCard.innerHTML = `
-      <div class="draft-section-header">
-        <span class="draft-section-title" style="color:var(--accent-l)">📚 References (collected from draft)</span>
-        <button id="refs-copy-all" class="btn-ghost small" style="margin-left:auto">📋 Copy All</button>
-      </div>
-      <p style="font-size:11px;color:var(--muted);margin:0 0 10px">These were generated by the AI. Verify each one before submitting.</p>
-      <div id="refs-list" style="font-size:0.8rem;line-height:1.9;color:var(--text);font-family:Georgia,serif">
-        ${allRefs.map(r => `<div style="margin-bottom:4px">${escHtml(r)}</div>`).join('')}
-      </div>`;
-    document.getElementById('draft-output').appendChild(refCard);
-    document.getElementById('refs-copy-all').addEventListener('click', () => {
-      navigator.clipboard.writeText(allRefs.join('\n'));
-      document.getElementById('refs-copy-all').textContent = '✅ Copied!';
-      setTimeout(() => { const b = document.getElementById('refs-copy-all'); if(b) b.textContent = '📋 Copy All'; }, 2000);
-    });
-  }
-
   document.getElementById('dp-label').textContent = stopped ? '⏹ Stopped' : '✅ Done!';
   document.getElementById('dp-fill').style.cssText += ';width:100%;background:var(--' + (stopped?'amber':'green') + ')';
   document.getElementById('dp-count').textContent = `${state.outline.length} / ${total}`;
   genBtn.style.display = '';
   stopBtn.style.display = 'none';
-  if (!stopped) showToast(collectedRefs.length ? '✅ Draft done — refs collected at bottom!' : '✅ Draft complete!');
+  if (!stopped) showToast('✅ Draft complete!');
 }
 
 // ─── Start ────────────────────────────────────────────────────────────────────

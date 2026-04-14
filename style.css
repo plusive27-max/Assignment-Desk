@@ -750,3 +750,22 @@ html, body {
 
 .ci-text { font-size: 0.825rem; color: var(--muted); transition: color var(--trans); }
 .checklist-item.done .ci-text { color: var(--text); text-decoration: line-through; text-decoration-color: var(--faint); }
+/* ── AI Draft Starter ── */
+.draft-section-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.draft-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.draft-section-title { font-weight: 600; font-size: 0.9rem; color: var(--text); }
+.draft-section-meta  { font-size: 0.75rem; color: var(--muted); }
+.draft-section-body  { font-size: 0.875rem; line-height: 1.8; color: var(--text); white-space: pre-wrap; }
