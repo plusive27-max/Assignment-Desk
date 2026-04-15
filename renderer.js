@@ -1969,7 +1969,7 @@ async function initDraftView() {
   const preferred = ['llama3.2','llama3.2:3b','llama3','mistral','gemma3'];
   if (!selectedAiModel || !models.includes(selectedAiModel))
     selectedAiModel = preferred.find(p => models.some(n => n.startsWith(p))) || models[0];
-  sel.innerHTML = models.map(n => `<option value="${n}"${n===selectedAiModel?' selected':''}>${n}</option>`).join('');
+sel.innerHTML = models.map(n => `<option value="${escHtml(n)}"...>${escHtml(n)}</option>`).join('');
   sel.addEventListener('change', e => { selectedAiModel = e.target.value; });
   // Wire toggle
   const toggle = document.getElementById('draft-full-toggle');
