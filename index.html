@@ -7,1104 +7,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Assignment Desk</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg:        #0f1117;
-      --surface:   #161820;
-      --surface2:  #1c1e2a;
-      --border:    #2a2d3a;
-      --text:      #e4e6f0;
-      --muted:     #7b7f94;
-      --faint:     #3e4258;
-      --accent:    #6c8ef5;
-      --accent-l:  #8aa4ff;
-      --accent-bg: #1a1f35;
-      --rose:      #f56c8e;
-      --amber:     #f5a623;
-      --green:     #4caf7d;
-      --radius:    8px;
-      --blue:  #5591c7;
-      --purple: #a86fdf;
-    }
-
-    html, body {
-      height: 100%;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      font-size: 14px;
-      background: var(--bg);
-      color: var(--text);
-      overflow: hidden;
-      user-select: none;
-    }
-
-    #app {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-    }
-    /* ── Preview ── */
-.preview-doc {
-  max-width: 720px; margin: 0 auto;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 32px 40px;
-}
-.preview-header { margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
-.preview-title  { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
-.preview-meta   { font-size: 13px; color: var(--muted); }
-.preview-section { margin-bottom: 28px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
-.preview-section:last-child { border-bottom: none; }
-.preview-section-title { font-size: 15px; font-weight: 700; color: var(--accent-l); margin-bottom: 4px; }
-.preview-section-meta  { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
-.preview-notes-text    { font-size: 13px; color: var(--text); line-height: 1.7; white-space: pre-wrap; }
-.preview-empty         { color: var(--faint); font-style: italic; font-size: 13px; }
-.preview-citations     { margin-top: 14px; }
-.preview-citations h5  { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 8px; }
-.preview-cite-item     { font-size: 12px; color: var(--muted); line-height: 1.6; margin-bottom: 4px; }
-.preview-toolbar       { display:flex; justify-content:flex-end; margin-bottom: 14px; }
-
-    /* ── Word Count Panel ── */
-.wc-panel {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  margin-bottom: 20px;
-  overflow: hidden;
-}
-
-/* ── Writing Checker ── */
-.checker-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-@media (max-width: 900px) { .checker-layout { grid-template-columns: 1fr; } }
-
-.checker-card {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-}
-.checker-card h4 {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 10px;
-}
-
-#checker-textarea {
-  width: 100%;
-  min-height: 200px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  font-size: 13px;
-  line-height: 1.7;
-  resize: vertical;
-  font-family: inherit;
-  margin-bottom: 10px;
-}
-#checker-textarea:focus { outline: none; border-color: var(--accent); }
-
-.checker-meta {
-  font-size: 11px;
-  color: var(--muted);
-  margin-bottom: 10px;
-}
-
-.checker-results { display: flex; flex-direction: column; gap: 12px; }
-
-.check-block {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-
-.check-block-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 12px;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.15s;
-}
-.check-block-header:hover { background: var(--surface2); }
-
-.check-block-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.check-pill {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 99px;
-}
-.check-pill.pass  { background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green); }
-.check-pill.warn  { background: color-mix(in srgb, var(--amber) 15%, transparent); color: var(--amber); }
-.check-pill.fail  { background: color-mix(in srgb, var(--rose)  15%, transparent); color: var(--rose);  }
-.check-pill.info  { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent-l); }
-
-.check-block-body {
-  display: none;
-  padding: 10px 12px;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.7;
-}
-.check-block.open .check-block-body { display: block; }
-.check-chevron { font-size: 10px; color: var(--faint); transition: transform 0.2s; }
-.check-block.open .check-chevron { transform: rotate(180deg); }
-
-.check-highlight-list { list-style: none; padding: 0; margin: 0; }
-.check-highlight-list li {
-  padding: 4px 8px;
-  border-radius: 4px;
-  margin-bottom: 3px;
-  font-size: 11px;
-  font-family: Georgia, serif;
-}
-.highlight-quote   { background: color-mix(in srgb, var(--amber) 12%, transparent); color: var(--amber); }
-.highlight-repeat  { background: color-mix(in srgb, var(--rose)  10%, transparent); color: var(--rose); }
-.highlight-short   { background: color-mix(in srgb, var(--blue)  10%, transparent); color: var(--blue); }
-.highlight-long    { background: color-mix(in srgb, var(--rose)  10%, transparent); color: var(--rose); }
-.highlight-ai      { background: color-mix(in srgb, var(--purple) 10%, transparent); color: var(--purple); }
-.highlight-passive { background: color-mix(in srgb, var(--amber) 10%, transparent); color: var(--amber); }
-
-.check-empty { color: var(--faint); font-style: italic; font-size: 11px; }
-
-.checker-score-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.checker-score-track {
-  flex: 1;
-  height: 6px;
-  background: var(--border);
-  border-radius: 99px;
-  overflow: hidden;
-}
-.checker-score-fill {
-  height: 100%;
-  border-radius: 99px;
-  transition: width 0.5s ease, background 0.3s;
-}
-.checker-score-label { font-size: 12px; font-weight: 700; min-width: 36px; text-align: right; }
-
-/* ── References ── */
-.refs-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-@media (max-width: 860px) { .refs-layout { grid-template-columns: 1fr; } }
-
-.refs-card {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-}
-.refs-card h4 {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 12px;
-}
-
-.refs-style-row {
-  display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-.refs-style-btn {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--muted);
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 11px;
-  cursor: pointer;
-  font-family: inherit;
-  transition: all 0.15s;
-}
-.refs-style-btn:hover { border-color: var(--accent); color: var(--accent-l); }
-.refs-style-btn.active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent-l); font-weight: 700; }
-
-.refs-type-select, .refs-input-grid select {
-  width: 100%;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 7px 10px;
-  border-radius: var(--radius);
-  font-size: 13px;
-  font-family: inherit;
-  margin-bottom: 10px;
-  cursor: pointer;
-}
-.refs-type-select:focus, .refs-input-grid select:focus { outline: none; border-color: var(--accent); }
-
-.refs-input-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 7px;
-  margin-bottom: 10px;
-}
-.refs-input-grid input {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 7px 10px;
-  border-radius: var(--radius);
-  font-size: 12px;
-  font-family: inherit;
-  width: 100%;
-}
-.refs-input-grid input:focus { outline: none; border-color: var(--accent); }
-.refs-input-grid .full { grid-column: 1 / -1; }
-
-.refs-output-box {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  min-height: 80px;
-  margin-bottom: 10px;
-}
-.refs-output-box .ref-formatted {
-  font-size: 13px;
-  color: var(--text);
-  line-height: 1.8;
-  font-family: Georgia, serif;
-}
-.refs-output-box .ref-formatted em { font-style: italic; }
-.refs-output-box .intext-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-top: 10px;
-  margin-bottom: 3px;
-}
-.refs-output-box .intext-formatted {
-  font-size: 13px;
-  color: var(--accent-l);
-  font-family: Georgia, serif;
-}
-.refs-output-empty {
-  color: var(--faint);
-  font-style: italic;
-  font-size: 12px;
-}
-
-.refs-copy-row {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 16px;
-}
-
-.refs-all-list { display: flex; flex-direction: column; gap: 0; }
-.refs-all-item {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
-  font-family: Georgia, serif;
-  color: var(--text);
-  line-height: 1.7;
-}
-.refs-all-item:last-child { border-bottom: none; }
-.refs-all-section-label {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--faint);
-  padding: 8px 12px 4px;
-  background: var(--surface2);
-  border-bottom: 1px solid var(--border);
-}
-.refs-all-item em { font-style: italic; }
-.refs-all-empty {
-  color: var(--faint);
-  font-style: italic;
-  font-size: 12px;
-  padding: 16px 12px;
-}
-.refs-copy-all-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 10px;
-}
-/* ── Pomodoro Float ── */
-#pomodoro {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 220px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg, 12px);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-  z-index: 9999;
-  overflow: hidden;
-  transition: height 0.2s ease;
-}
-/* ── Light mode overrides ── */
-[data-theme="light"] {
-  --bg:       #f5f5f0;
-  --surface:  #ffffff;
-  --surface2: #f0efe9;
-  --border:   #dddbd4;
-  --text:     #1a1a1a;
-  --muted:    #666560;
-  --faint:    #aaa89f;
-
-  --accent:     #01696f;
-  --accent-l:   #0c4e54;
-  --accent-bg:  #e0f0ef;
-
-  --green:  #437a22;
-  --rose:   #a12c7b;
-  --amber:  #d19900;
-  --blue: #006494;
-  --purple: #7a39bb;
-}
-
-[data-theme="light"] #pomodoro {
-  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
-}
-
-[data-theme="light"] .wc-panel,
-[data-theme="light"] .preview-doc {
-  background: #ffffff;
-}
-
-#theme-toggle {
-  font-size: 16px;
-  padding: 4px 8px;
-  flex-shrink: 0;
-}
-#pomo-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 12px;
-  background: var(--surface2);
-  cursor: pointer;
-  user-select: none;
-  border-bottom: 1px solid var(--border);
-}
-
-#pomo-header-left {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-#pomo-minimise {
-  font-size: 11px;
-  color: var(--muted);
-  transition: color 0.15s;
-}
-#pomo-minimise:hover { color: var(--text); }
-
-#pomo-body {
-  padding: 14px 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
-#pomodoro.minimised #pomo-body { display: none; }
-
-.pomo-mode-row {
-  display: flex;
-  gap: 4px;
-  width: 100%;
-}
-
-.pomo-mode-btn {
-  flex: 1;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--muted);
-  padding: 4px 0;
-  border-radius: 6px;
-  font-size: 11px;
-  cursor: pointer;
-  font-family: inherit;
-  transition: all 0.15s;
-}
-.pomo-mode-btn:hover { border-color: var(--accent); color: var(--accent-l); }
-.pomo-mode-btn.active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent-l); font-weight: 600; }
-
-#pomo-ring-wrap {
-  position: relative;
-  width: 110px;
-  height: 110px;
-}
-
-#pomo-svg {
-  transform: rotate(-90deg);
-  width: 110px;
-  height: 110px;
-}
-
-#pomo-ring-bg {
-  fill: none;
-  stroke: var(--faint);
-  stroke-width: 6;
-}
-
-#pomo-ring-fill {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 6;
-  stroke-linecap: round;
-  transition: stroke-dashoffset 1s linear, stroke 0.3s;
-}
-
-#pomo-time-display {
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: -0.5px;
-}
-
-#pomo-label {
-  font-size: 11px;
-  color: var(--muted);
-  text-align: center;
-}
-
-.pomo-controls {
-  display: flex;
-  gap: 6px;
-}
-
-.pomo-ctrl-btn {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  width: 34px; height: 34px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s;
-}
-.pomo-ctrl-btn:hover { border-color: var(--accent); color: var(--accent-l); }
-.pomo-ctrl-btn.start { background: var(--accent); border-color: var(--accent); color: #fff; width: 54px; }
-.pomo-ctrl-btn.start:hover { background: var(--accent-l); }
-
-#pomo-sessions {
-  font-size: 11px;
-  color: var(--muted);
-}
-#pomo-sessions span { color: var(--accent-l); font-weight: 700; 
-}
-
-.wc-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 11px 14px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  user-select: none;
-  transition: background 0.15s;
-}
-.wc-panel-header:hover { background: var(--border); }
-.wc-chevron { font-size: 10px; color: var(--muted); transition: transform 0.2s; }
-.wc-panel.open .wc-chevron { transform: rotate(180deg); }
-
-.wc-panel-body {
-  display: none;
-  padding: 14px;
-  border-top: 1px solid var(--border);
-  flex-direction: column;
-  gap: 10px;
-}
-.wc-panel.open .wc-panel-body { display: flex; }
-
-.wc-controls {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.wc-controls select {
-  flex: 1;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 6px 10px;
-  border-radius: var(--radius);
-  font-size: 13px;
-  font-family: inherit;
-  cursor: pointer;
-}
-.wc-controls select:focus { outline: none; border-color: var(--accent); }
-
-#wc-textarea {
-  width: 100%;
-  min-height: 120px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  font-size: 13px;
-  line-height: 1.6;
-  resize: vertical;
-  font-family: inherit;
-}
-#wc-textarea:focus { outline: none; border-color: var(--accent); }
-
-.wc-stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-
-.wc-stat {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px;
-  text-align: center;
-}
-.wc-stat span {
-  display: block;
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--accent-l);
-}
-.wc-stat label {
-  display: block;
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 3px;
-}
-
-.wc-apply-msg {
-  font-size: 12px;
-  color: var(--green);
-  text-align: center;
-  min-height: 18px;
-}
-
-    /* ── Title bar ── */
-    #titlebar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      height: 40px;
-      padding: 0 12px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      -webkit-app-region: drag;
-      flex-shrink: 0;
-    }
-
-    #titlebar-left {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    #titlebar-logo {
-      font-size: 15px;
-      font-weight: 700;
-      color: var(--accent-l);
-      letter-spacing: -0.3px;
-    }
-
-    .deadline-pill {
-      font-size: 11px;
-      padding: 2px 9px;
-      border-radius: 20px;
-      background: var(--faint);
-      color: var(--muted);
-    }
-    .deadline-pill.ok     { background: #1a2e22; color: var(--green); }
-    .deadline-pill.soon   { background: #2e2010; color: var(--amber); }
-    .deadline-pill.urgent { background: #2e1020; color: var(--rose); }
-
-    #titlebar-right {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      -webkit-app-region: no-drag;
-    }
-
-    .win-btn {
-      width: 28px; height: 28px;
-      border: none; background: transparent;
-      color: var(--muted); border-radius: 6px;
-      cursor: pointer; font-size: 14px;
-      display: flex; align-items: center; justify-content: center;
-      transition: background 0.15s, color 0.15s;
-    }
-    .win-btn:hover { background: var(--border); color: var(--text); }
-    #btn-close:hover { background: var(--rose); color: #fff; }
-
-    /* ── Top bar ── */
-    #topbar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 16px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-      -webkit-app-region: no-drag;
-    }
-
-    #topbar input {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 6px 10px;
-      border-radius: var(--radius);
-      font-size: 13px;
-      font-family: inherit;
-    }
-    #topbar input:focus { outline: none; border-color: var(--accent); }
-
-    #asgn-title   { flex: 1; font-weight: 600; }
-    #asgn-subject { width: 130px; }
-    #asgn-deadline{ width: 140px; }
-    #asgn-words   { width: 90px; }
-
-    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); cursor: pointer; }
-
-    .btn-primary {
-      background: var(--accent); color: #fff;
-      border: none; padding: 6px 14px;
-      border-radius: var(--radius); cursor: pointer;
-      font-size: 13px; font-weight: 600;
-      white-space: nowrap; font-family: inherit;
-      transition: background 0.15s;
-    }
-    .btn-primary:hover { background: var(--accent-l); }
-    .btn-primary.small { padding: 5px 11px; font-size: 12px; }
-
-    .btn-ghost {
-      background: transparent; color: var(--muted);
-      border: 1px solid var(--border); padding: 6px 14px;
-      border-radius: var(--radius); cursor: pointer;
-      font-size: 13px; white-space: nowrap; font-family: inherit;
-      transition: all 0.15s;
-    }
-    .btn-ghost:hover { border-color: var(--accent); color: var(--accent-l); }
-
-    /* ── Nav ── */
-    #nav {
-      display: flex;
-      gap: 2px;
-      padding: 8px 16px 0;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-      -webkit-app-region: no-drag;
-    }
-
-    .nav-item {
-      padding: 7px 16px;
-      background: transparent; border: none;
-      border-bottom: 2px solid transparent;
-      color: var(--muted); cursor: pointer;
-      font-size: 13px; font-weight: 500;
-      font-family: inherit;
-      transition: all 0.15s;
-      margin-bottom: -1px;
-    }
-    .nav-item:hover  { color: var(--text); }
-    .nav-item.active { color: var(--accent-l); border-bottom-color: var(--accent); }
-
-    /* ── Views ── */
-    #views {
-      flex: 1;
-      overflow: hidden;
-      position: relative;
-    }
-
-    .view {
-      display: none;
-      height: 100%;
-      overflow-y: auto;
-      padding: 20px;
-    }
-    .view.active { display: block; }
-
-    #view-notes {
-      display: none;
-      padding: 0;
-    }
-    #view-notes.active { display: flex; }
-
-    /* ── Shared ── */
-    .section-label {
-      font-size: 11px; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.8px;
-      color: var(--muted); margin-bottom: 12px;
-    }
-
-    .placeholder-msg {
-      color: var(--muted); font-size: 13px;
-      padding: 24px 0; text-align: center;
-    }
-
-    /* ── Brief view ── */
-    #view-brief { display: none; flex-direction: column; gap: 14px; }
-    #view-brief.active { display: flex; }
-
-    #brief-text {
-      width: 100%; min-height: 160px;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--text); padding: 12px;
-      border-radius: var(--radius);
-      font-size: 13px; line-height: 1.6;
-      resize: vertical; font-family: inherit;
-    }
-    #brief-text:focus { outline: none; border-color: var(--accent); }
-
-    .brief-btn-row {
-      display: flex; gap: 8px;
-      align-items: center; flex-wrap: wrap;
-    }
-
-    #upload-filename { font-size: 12px; color: var(--muted); }
-
-    #brief-results {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 14px; min-height: 80px;
-      font-size: 13px; line-height: 1.6;
-    }
-
-    .result-section { margin-bottom: 16px; }
-    .result-section h4 {
-      font-size: 12px; font-weight: 700;
-      color: var(--accent-l); margin-bottom: 10px;
-    }
-    .result-section > div { margin-bottom: 8px; }
-
-    .verb-tag {
-      display: inline-block;
-      background: var(--accent-bg); color: var(--accent-l);
-      font-size: 11px; font-weight: 700;
-      padding: 2px 8px; border-radius: 20px;
-      text-transform: uppercase; margin-bottom: 3px;
-    }
-    .verb-meaning { font-size: 12px; color: var(--muted); }
-
-    .suggestion-item {
-      display: flex; justify-content: space-between;
-      align-items: center; padding: 6px 10px;
-      background: var(--bg); border-radius: var(--radius);
-      font-size: 12px; margin-bottom: 4px;
-    }
-    .suggestion-item .pct { color: var(--accent-l); font-weight: 600; }
-
-    /* ── Outline view ── */
-    .outline-toolbar {
-      display: flex; gap: 8px;
-      align-items: center; margin-bottom: 14px;
-      flex-wrap: wrap;
-    }
-
-    .chip {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--muted); padding: 4px 12px;
-      border-radius: 20px; cursor: pointer;
-      font-size: 12px; font-family: inherit;
-      transition: all 0.15s;
-    }
-    .chip:hover { border-color: var(--accent); color: var(--accent-l); }
-
-    .outline-section {
-      display: flex; gap: 8px;
-      align-items: center; margin-bottom: 6px;
-    }
-
-    .os-title {
-      flex: 1; background: var(--surface2);
-      border: 1px solid var(--border); color: var(--text);
-      padding: 7px 10px; border-radius: var(--radius);
-      font-size: 13px; font-family: inherit;
-    }
-    .os-title:focus { outline: none; border-color: var(--accent); }
-
-    .os-words {
-      width: 90px; background: var(--surface2);
-      border: 1px solid var(--border); color: var(--text);
-      padding: 7px 10px; border-radius: var(--radius);
-      font-size: 13px; font-family: inherit; text-align: right;
-    }
-    .os-words:focus { outline: none; border-color: var(--accent); }
-
-    .del-section-btn {
-      background: transparent; border: 1px solid transparent;
-      color: var(--faint); width: 28px; height: 28px;
-      border-radius: 6px; cursor: pointer; font-size: 13px;
-      display: flex; align-items: center; justify-content: center;
-      transition: all 0.15s; flex-shrink: 0;
-    }
-    .del-section-btn:hover { border-color: var(--border); color: var(--rose); }
-
-    .outline-footer {
-      margin-top: 14px; padding: 10px 14px;
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: var(--radius);
-      display: flex; gap: 16px; align-items: center;
-      font-size: 12px; color: var(--muted);
-    }
-    .outline-footer strong { color: var(--text); }
-    #wc-diff { margin-left: auto; }
-    #wc-diff.ok { color: var(--green); }
-
-    /* ── Notes view ── */
-    #notes-nav {
-      width: 200px; flex-shrink: 0;
-      border-right: 1px solid var(--border);
-      overflow-y: auto; padding: 12px 8px;
-      background: var(--surface);
-    }
-
-    .notes-section-btn {
-      display: block; width: 100%;
-      padding: 8px 10px; border-radius: var(--radius);
-      background: transparent; border: none;
-      color: var(--muted); cursor: pointer;
-      font-size: 12px; font-family: inherit;
-      text-align: left; transition: all 0.15s;
-      margin-bottom: 2px;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .notes-section-btn:hover  { background: var(--surface2); color: var(--text); }
-    .notes-section-btn.active { background: var(--accent-bg); color: var(--accent-l); font-weight: 600; }
-
-    #notes-body {
-      flex: 1; overflow-y: auto; padding: 16px;
-    }
-
-    .notes-editor-wrap { display: flex; flex-direction: column; gap: 16px; }
-
-    .field-label {
-      display: block; font-size: 13px;
-      font-weight: 600; color: var(--accent-l);
-      margin-bottom: 8px;
-    }
-
-    .notes-textarea {
-      width: 100%;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--text); padding: 12px;
-      border-radius: var(--radius);
-      font-size: 13px; line-height: 1.7;
-      resize: vertical; font-family: inherit;
-    }
-    .notes-textarea:focus { outline: none; border-color: var(--accent); }
-
-    .citations-section h4 {
-      font-size: 12px; font-weight: 700;
-      color: var(--muted); margin-bottom: 10px;
-    }
-
-    .add-citation-form {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 6px; margin-bottom: 10px;
-    }
-
-    .add-citation-form input {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--text); padding: 6px 9px;
-      border-radius: var(--radius);
-      font-size: 12px; font-family: inherit;
-    }
-    .add-citation-form input:focus { outline: none; border-color: var(--accent); }
-    .add-citation-form input::placeholder { color: var(--faint); }
-
-    .citation-item {
-      display: flex; align-items: flex-start;
-      justify-content: space-between; gap: 8px;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 8px 10px; margin-bottom: 4px;
-    }
-    .cite-text { font-size: 12px; color: var(--muted); line-height: 1.5; }
-    .cite-text em { color: var(--text); font-style: italic; }
-
-    .del-cite-btn {
-      background: transparent; border: none;
-      color: var(--faint); cursor: pointer;
-      font-size: 12px; flex-shrink: 0;
-      transition: color 0.15s; padding: 0 3px;
-    }
-    .del-cite-btn:hover { color: var(--rose); }
-    /* ── Drag to Reorder ── */
-.drag-handle {
-  cursor: grab; color: var(--faint); font-size: 16px;
-  padding: 0 2px 0 0; user-select: none; flex-shrink: 0;
-  transition: color 0.15s;
-}
-.drag-handle:hover { color: var(--muted); }
-.drag-handle:active { cursor: grabbing; }
-.outline-section.dragging { opacity: 0.35; }
-.outline-section.drag-over {
-  border-color: var(--accent);
-  background: var(--accent-bg);
-}
-
-/* ── Notes Search ── */
-.notes-search-wrap {
-  padding: 6px 8px 5px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.notes-search-input {
-  width: 100%; background: var(--bg); border: 1px solid var(--border);
-  color: var(--text); padding: 5px 8px; border-radius: var(--radius);
-  font-size: 11px; font-family: inherit;
-}
-.notes-search-input:focus { outline: none; border-color: var(--accent); }
-.notes-section-btn mark {
-  background: color-mix(in srgb, var(--accent) 25%, transparent);
-  color: var(--accent-l); border-radius: 2px; padding: 0 1px;
-}
-.notes-search-badge {
-  background: var(--accent-bg); color: var(--accent-l);
-  font-size: 10px; padding: 1px 5px; border-radius: 99px;
-  margin-left: 5px; font-weight: 700;
-}
-
-/* ── Readability highlight (stats list) ── */
-.highlight-readability {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  color: var(--muted);
-}
-
-    /* ── Progress view ── */
-    .progress-stats {
-      display: grid; grid-template-columns: repeat(4, 1fr);
-      gap: 12px; margin-bottom: 20px;
-    }
-
-    .stat-card {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 14px; text-align: center;
-    }
-    .stat-value { font-size: 24px; font-weight: 700; color: var(--accent-l); }
-    .stat-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
-
-    .progress-section-item {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 14px; margin-bottom: 8px;
-      display: flex; align-items: center;
-      justify-content: space-between; gap: 16px;
-    }
-    .progress-section-item > div:first-child { flex: 1; }
-
-    .ps-name { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
-    .ps-bar-wrap {
-      height: 4px; background: var(--faint);
-      border-radius: 99px; overflow: hidden; margin-bottom: 4px;
-    }
-    .ps-bar { height: 100%; background: var(--accent); border-radius: 99px; transition: width 0.3s; }
-    .ps-meta { font-size: 11px; color: var(--muted); }
-
-    .ps-input-wrap { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
-    .ps-input-wrap label { font-size: 11px; color: var(--muted); }
-    .ps-input-wrap input {
-      width: 90px; background: var(--bg);
-      border: 1px solid var(--border); color: var(--text);
-      padding: 5px 8px; border-radius: var(--radius);
-      font-size: 13px; text-align: right; font-family: inherit;
-    }
-    .ps-input-wrap input:focus { outline: none; border-color: var(--accent); }
-
-    /* ── Checklist view ── */
-    .checklist-score {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 14px 16px;
-      margin-bottom: 20px; display: flex;
-      align-items: center; gap: 16px;
-    }
-    .cs-label { font-size: 13px; font-weight: 600; white-space: nowrap; }
-    .cs-bar-wrap { flex: 1; height: 6px; background: var(--faint); border-radius: 99px; overflow: hidden; }
-    #cs-fill { height: 100%; background: var(--green); border-radius: 99px; transition: width 0.3s; }
-    .cs-count { font-size: 13px; color: var(--muted); white-space: nowrap; }
-
-    .checklist-group { margin-bottom: 20px; }
-    .checklist-group h4 {
-      font-size: 11px; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.8px;
-      color: var(--muted); margin-bottom: 8px;
-    }
-
-    .checklist-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 9px 12px; border-radius: var(--radius);
-      cursor: pointer; transition: background 0.15s; margin-bottom: 3px;
-    }
-    .checklist-item:hover { background: var(--surface2); }
-    .checklist-item.done  { opacity: 0.55; }
-    .checklist-item.done .ci-text { text-decoration: line-through; color: var(--muted); }
-
-    .ci-checkbox {
-      width: 18px; height: 18px;
-      border: 2px solid var(--border); border-radius: 4px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 11px; color: var(--green); flex-shrink: 0; transition: all 0.15s;
-    }
-    .checklist-item.done .ci-checkbox { background: var(--green); border-color: var(--green); color: #fff; }
-    .ci-text { font-size: 13px; }
-
-    /* ── Scrollbar ── */
-    ::-webkit-scrollbar { width: 5px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--faint); border-radius: 99px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
-
-    input::placeholder, textarea::placeholder { color: var(--faint); }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app">
@@ -1124,22 +27,20 @@
 
   <!-- Top assignment bar -->
   <div id="topbar">
-    <button class="btn-ghost" id="theme-toggle" title="Toggle dark/light mode">🌙
-    </button>
+    <button class="btn-ghost" id="theme-toggle" title="Toggle dark/light mode">🌙</button>
     <input id="asgn-title"    type="text"   placeholder="Assignment title…" />
     <input id="asgn-subject"  type="text"   placeholder="Subject…" />
     <input id="asgn-deadline" type="date"   title="Deadline" />
     <input id="asgn-words"    type="number" placeholder="Total words" min="0" />
     <button class="btn-ghost" id="new-btn">＋ New</button>
-    <button class="btn-ghost" id="save-btn" title="Save assignment locally">
-  Save
-</button>
-
-<button class="btn-ghost" id="export-btn" title="Export assignment as JSON">Export JSON</button>
-<button class="btn-ghost" id="export-pdf-btn" title="Export as PDF">Export PDF</button>
-          <button class="btn-ghost" id="export-docx-btn" title="Export as DOCX">Export DOCX</button>
-<button class="btn-ghost" id="import-btn" title="Load assignment from file">📂 Import</button>
-
+    <button class="btn-ghost" id="stats-btn" title="View statistics">📊 Stats</button>
+    <button class="btn-ghost" id="undo-btn" title="Undo (Ctrl+Z)">↶</button>
+    <button class="btn-ghost" id="redo-btn" title="Redo (Ctrl+Shift+Z)">↷</button>
+    <button class="btn-ghost" id="save-btn" title="Save assignment locally">Save</button>
+    <button class="btn-ghost" id="export-btn" title="Export assignment as JSON">Export JSON</button>
+    <button class="btn-ghost" id="export-pdf-btn" title="Export as PDF">Export PDF</button>
+    <button class="btn-ghost" id="export-docx-btn" title="Export as DOCX">Export DOCX</button>
+    <button class="btn-ghost" id="import-btn" title="Load assignment from file">📂 Import</button>
   </div>
 
   <!-- Nav -->
@@ -1157,28 +58,28 @@
 
   <!-- Views -->
   <div id="views">
-    
+
     <!-- Brief -->
     <div id="view-brief" class="view active">
       <div class="section-label">Assignment Brief</div>
       <textarea id="brief-text" placeholder="Paste your assignment brief here…"></textarea>
       <div class="brief-btn-row">
         <button class="btn-primary" id="analyse-btn">🔍 Analyse Brief</button>
-          <button class="btn-ghost" id="ai-analyse-btn">✨ AI Analyse</button>
+        <button class="btn-ghost"   id="ai-analyse-btn">✨ AI Analyse</button>
         <button class="btn-ghost"   id="upload-brief-btn">📎 Upload PDF or DOCX</button>
         <span id="upload-filename"></span>
       </div>
       <div id="brief-results">
         <div class="placeholder-msg">✦ Paste your brief and click Analyse</div>
       </div>
-    </div> 
-  
+    </div>
+
     <!-- Outline -->
     <div id="view-outline" class="view">
       <div class="section-label">Outline Builder</div>
       <div class="outline-toolbar">
         <button class="btn-primary" id="add-section-btn">＋ Add Section</button>
-        <span style="font-size:12px;color:var(--muted);">Templates:</span>
+        <span class="tpl-label">Templates:</span>
         <button class="chip" data-tpl="essay">Essay</button>
         <button class="chip" data-tpl="report">Report</button>
         <button class="chip" data-tpl="litreview">Lit Review</button>
@@ -1201,28 +102,27 @@
     <!-- Progress -->
     <div id="view-progress" class="view">
       <div class="section-label">Writing Progress</div>
-      <!-- Paste & Count panel -->
-<div class="wc-panel" id="wc-panel">
-  <div class="wc-panel-header" id="wc-toggle">
-    📋 Paste &amp; Count  <span class="wc-chevron">▼</span>
-  </div>
-  <div class="wc-panel-body">
-    <div class="wc-controls">
-      <select id="wc-section-select">
-        <option value="">— Select section to apply count —</option>
-      </select>
-      <button class="btn-primary small" id="wc-apply-btn">Apply Count →</button>
-    </div>
-    <textarea id="wc-textarea" placeholder="Paste your draft text here to live-count words…"></textarea>
-    <div class="wc-stats">
-      <div class="wc-stat"><span id="wc-words">0</span><label>Words</label></div>
-      <div class="wc-stat"><span id="wc-chars">0</span><label>Characters</label></div>
-      <div class="wc-stat"><span id="wc-sentences">0</span><label>Sentences</label></div>
-      <div class="wc-stat"><span id="wc-reading">0 min</span><label>Read time</label></div>
-    </div>
-    <div class="wc-apply-msg" id="wc-apply-msg"></div>
-  </div>
-</div>
+      <div class="wc-panel" id="wc-panel">
+        <div class="wc-panel-header" id="wc-toggle">
+          📋 Paste &amp; Count <span class="wc-chevron">▼</span>
+        </div>
+        <div class="wc-panel-body">
+          <div class="wc-controls">
+            <select id="wc-section-select">
+              <option value="">— Select section to apply count —</option>
+            </select>
+            <button class="btn-primary small" id="wc-apply-btn">Apply Count →</button>
+          </div>
+          <textarea id="wc-textarea" placeholder="Paste your draft text here to live-count words…"></textarea>
+          <div class="wc-stats">
+            <div class="wc-stat"><span id="wc-words">0</span><label>Words</label></div>
+            <div class="wc-stat"><span id="wc-chars">0</span><label>Characters</label></div>
+            <div class="wc-stat"><span id="wc-sentences">0</span><label>Sentences</label></div>
+            <div class="wc-stat"><span id="wc-reading">0 min</span><label>Read time</label></div>
+          </div>
+          <div class="wc-apply-msg" id="wc-apply-msg"></div>
+        </div>
+      </div>
       <div class="progress-stats">
         <div class="stat-card">
           <div class="stat-value" id="stat-pct">0%</div>
@@ -1249,120 +149,120 @@
       <div class="section-label">Submission Checklist</div>
       <div class="checklist-score">
         <span class="cs-label">Progress</span>
-        <div class="cs-bar-wrap"><div id="cs-fill" style="width:0%"></div></div>
+        <div class="cs-bar-wrap"><div id="cs-fill"></div></div>
         <span class="cs-count"><span id="cs-done">0</span> / <span id="cs-total">0</span></span>
       </div>
       <div id="checklist-groups"></div>
     </div>
+
     <!-- Preview -->
-<div id="view-preview" class="view">
-  <div class="section-label">Assignment Preview</div>
-  <div class="preview-toolbar">
-    <button class="btn-ghost" id="refresh-preview-btn">🔄 Refresh</button>
-  </div>
-  <div id="preview-content"></div>
-</div>
-<!-- References -->
-<div id="view-refs" class="view">
-  <div class="section-label">Reference Formatter</div>
-  <div class="refs-style-row" id="refs-style-row">
-    <button class="refs-style-btn active" data-style="solent">Solent Harvard</button>
-    <button class="refs-style-btn" data-style="harvard">Harvard</button>
-    <button class="refs-style-btn" data-style="apa">APA 7th</button>
-    <button class="refs-style-btn" data-style="mla">MLA 9th</button>
-    <button class="refs-style-btn" data-style="vancouver">Vancouver</button>
-    <button class="refs-style-btn" data-style="oscola">OSCOLA</button>
-    <button class="refs-style-btn" data-style="chicago">Chicago</button>
-  </div>
-  <div class="refs-layout">
-    <div class="refs-card">
-      <h4>📝 Format a Reference</h4>
-      <select class="refs-type-select" id="refs-source-type">
-        <option value="book">Book</option>
-        <option value="journal">Journal Article</option>
-        <option value="website">Website / Web Page</option>
-        <option value="chapter">Chapter in Edited Book</option>
-        <option value="report">Report / Government Document</option>
-      </select>
-      <div class="refs-input-grid" id="refs-fields"></div>
-      <div class="refs-output-box" id="refs-output">
-        <div class="refs-output-empty">Fill in the fields above to generate your reference.</div>
+    <div id="view-preview" class="view">
+      <div class="section-label">Assignment Preview</div>
+      <div class="preview-toolbar">
+        <button class="btn-ghost" id="refresh-preview-btn">🔄 Refresh</button>
       </div>
-      <div class="refs-copy-row">
-        <button class="btn-primary small" id="refs-copy-ref-btn">📋 Copy Reference</button>
-        <button class="btn-ghost small" id="refs-copy-intext-btn">📋 Copy In-Text</button>
-        <button class="btn-ghost small" id="refs-clear-btn">✕ Clear</button>
-      </div>
+      <div id="preview-content"></div>
     </div>
-    <div class="refs-card">
-      <h4>📚 All References (from Notes)</h4>
-      <div class="refs-copy-all-row">
-        <button class="btn-ghost small" id="refs-copy-all-btn">📋 Copy All as Reference List</button>
-      </div>
-      <div id="refs-all-list" class="refs-all-list"></div>
-    </div>
-  </div>
-</div>
 
-<!-- Writing Checker -->
-<div id="view-checker" class="view">
-  <div class="section-label">Writing Checker</div>
-  <div class="checker-layout">
-    <div class="checker-card">
-      <h4>📋 Paste Your Draft Text</h4>
-      <textarea id="checker-textarea" placeholder="Paste your essay or assignment draft here…"></textarea>
-      <div class="checker-meta" id="checker-meta">Paste text above to begin analysis.</div>
-      <button class="btn-primary small" id="checker-run-btn">🔍 Analyse Text</button>
-          <button class="btn-ghost small" id="ai-checker-btn">✨ AI Check</button>
-    </div>
-    <div class="checker-card">
-      <h4>📊 Results</h4>
-      <div class="checker-score-bar">
-        <div class="checker-score-track">
-          <div class="checker-score-fill" id="checker-score-fill" style="width:0%;background:var(--green)"></div>
+    <!-- References -->
+    <div id="view-refs" class="view">
+      <div class="section-label">Reference Formatter</div>
+      <div class="refs-style-row" id="refs-style-row">
+        <button class="refs-style-btn active" data-style="solent">Solent Harvard</button>
+        <button class="refs-style-btn" data-style="harvard">Harvard</button>
+        <button class="refs-style-btn" data-style="apa">APA 7th</button>
+        <button class="refs-style-btn" data-style="mla">MLA 9th</button>
+        <button class="refs-style-btn" data-style="vancouver">Vancouver</button>
+        <button class="refs-style-btn" data-style="oscola">OSCOLA</button>
+        <button class="refs-style-btn" data-style="chicago">Chicago</button>
+      </div>
+      <div class="refs-layout">
+        <div class="refs-card">
+          <h4>📝 Format a Reference</h4>
+          <select class="refs-type-select" id="refs-source-type">
+            <option value="book">Book</option>
+            <option value="journal">Journal Article</option>
+            <option value="website">Website / Web Page</option>
+            <option value="chapter">Chapter in Edited Book</option>
+            <option value="report">Report / Government Document</option>
+          </select>
+          <div class="refs-input-grid" id="refs-fields"></div>
+          <div class="refs-output-box" id="refs-output">
+            <div class="refs-output-empty">Fill in the fields above to generate your reference.</div>
+          </div>
+          <div class="refs-copy-row">
+            <button class="btn-primary small" id="refs-copy-ref-btn">📋 Copy Reference</button>
+            <button class="btn-ghost small"   id="refs-copy-intext-btn">📋 Copy In-Text</button>
+            <button class="btn-ghost small"   id="refs-clear-btn">✕ Clear</button>
+          </div>
         </div>
-        <div class="checker-score-label" id="checker-score-label" style="color:var(--muted)">–</div>
-      </div>
-      <div class="checker-results" id="checker-results">
-        <div class="check-empty">Run analysis to see results.</div>
+        <div class="refs-card">
+          <h4>📚 All References (from Notes)</h4>
+          <div class="refs-copy-all-row">
+            <button class="btn-ghost small" id="refs-copy-all-btn">📋 Copy All as Reference List</button>
+          </div>
+          <div id="refs-all-list" class="refs-all-list"></div>
+        </div>
       </div>
     </div>
-  </div>
-</div>
 
+    <!-- Writing Checker -->
+    <div id="view-checker" class="view">
+      <div class="section-label">Writing Checker</div>
+      <div class="checker-layout">
+        <div class="checker-card">
+          <h4>📋 Paste Your Draft Text</h4>
+          <textarea id="checker-textarea" placeholder="Paste your essay or assignment draft here…"></textarea>
+          <div class="checker-meta" id="checker-meta">Paste text above to begin analysis.</div>
+          <button class="btn-primary small" id="checker-run-btn">🔍 Analyse Text</button>
+          <button class="btn-ghost small"   id="ai-checker-btn">✨ AI Check</button>
+        </div>
+        <div class="checker-card">
+          <h4>📊 Results</h4>
+          <div class="checker-score-bar">
+            <div class="checker-score-track">
+              <div class="checker-score-fill" id="checker-score-fill"></div>
+            </div>
+            <div class="checker-score-label" id="checker-score-label">–</div>
+          </div>
+          <div class="checker-results" id="checker-results">
+            <div class="check-empty">Run analysis to see results.</div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- AI Draft Starter -->
     <div id="view-draft" class="view">
       <div class="section-label">🤖 AI Draft Starter</div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-        <select id="draft-model-select" style="background:var(--surface2);border:1px solid var(--border);
-          color:var(--text);padding:7px 10px;border-radius:var(--radius);font:inherit;font-size:13px;
-          cursor:pointer;min-width:180px">
+      <div class="draft-controls-row">
+        <select id="draft-model-select" class="draft-model-select">
           <option value="">Loading models…</option>
         </select>
-        <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--surface2);
-          border:1px solid var(--border);border-radius:var(--radius)">
-          <span style="font-size:12px;color:var(--muted)">Starter</span>
-          <label style="position:relative;display:inline-block;width:38px;height:22px;cursor:pointer">
-            <input type="checkbox" id="draft-full-toggle" style="opacity:0;width:0;height:0;position:absolute">
-            <span id="draft-toggle-track" style="position:absolute;inset:0;background:var(--border);
-              border-radius:99px;transition:background 0.2s;pointer-events:none"></span>
-            <span id="draft-toggle-thumb" style="position:absolute;top:3px;left:3px;width:16px;height:16px;
-              background:#fff;border-radius:50%;transition:left 0.2s;pointer-events:none"></span>
+        <div class="draft-toggle-wrap">
+          <span class="draft-toggle-label">Starter</span>
+          <label class="draft-toggle-track-label">
+            <input type="checkbox" id="draft-full-toggle" class="draft-toggle-input">
+            <span class="draft-toggle-track"></span>
+            <span class="draft-toggle-thumb"></span>
           </label>
-          <span style="font-size:12px;color:var(--muted)">Full Draft</span>
+          <span class="draft-toggle-label">Full Draft</span>
         </div>
         <button class="btn-primary" id="draft-generate-btn">✨ Generate</button>
-        <button class="btn-ghost"   id="draft-stop-btn" style="display:none">⏹ Stop</button>
+        <button class="btn-ghost draft-stop-btn" id="draft-stop-btn">⏹ Stop</button>
       </div>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.6">
-        <strong style="color:var(--text)">Starter</strong> writes one opening paragraph per section to get you going.<br>
-        <strong style="color:var(--text)">Full Draft</strong> writes the complete section text for every part of your outline.
+      <p class="draft-hint">
+        <strong>Starter</strong> writes one opening paragraph per section to get you going.<br>
+        <strong>Full Draft</strong> writes the complete section text for every part of your outline.
       </p>
       <div id="draft-output"></div>
     </div>
+
   </div><!-- /views -->
+  <!-- Auto-save Indicator -->
+  <div id="save-indicator" style="position:fixed;top:50px;right:20px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);font-size:0.8rem;color:var(--muted);opacity:0;transform:translateY(-10px);transition:all 0.3s;pointer-events:none;z-index:1000">Saved</div>
 </div><!-- /app -->
+
 <!-- Pomodoro floating panel -->
 <div id="pomodoro">
   <div id="pomo-header">
@@ -1390,6 +290,7 @@
     <div id="pomo-sessions">Sessions today: <span id="pomo-count">0</span></div>
   </div>
 </div>
+
 <script src="renderer.js"></script>
 </body>
 </html>

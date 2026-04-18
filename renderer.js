@@ -17,6 +17,219 @@ let wcInitialised      = false;
 let notesSearchQuery = '';
 
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// NEW FEATURES - Undo/Redo, Keyboard Shortcuts, Statistics
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Undo/Redo System ─────────────────────────────────────────────────────────
+const undoStack = [];
+const redoStack = [];
+const MAX_UNDO = 50;
+
+function saveUndoState() {
+  undoStack.push(JSON.stringify({ outline: state.outline, notes: state.notes }));
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  redoStack.length = 0;
+}
+
+function undo() {
+  if (!undoStack.length) {
+    showToast('⚠️ Nothing to undo');
+    return;
+  }
+  redoStack.push(JSON.stringify({ outline: state.outline, notes: state.notes }));
+  const prev = JSON.parse(undoStack.pop());
+  state.outline = prev.outline;
+  state.notes = prev.notes;
+  renderOutline();
+  if (typeof renderNotesSidebar === 'function') renderNotesSidebar();
+  if (typeof renderNotesBody === 'function') renderNotesBody();
+  showToast('↶ Undo');
+}
+
+function redo() {
+  if (!redoStack.length) {
+    showToast('⚠️ Nothing to redo');
+    return;
+  }
+  undoStack.push(JSON.stringify({ outline: state.outline, notes: state.notes }));
+  const next = JSON.parse(redoStack.pop());
+  state.outline = next.outline;
+  state.notes = next.notes;
+  renderOutline();
+  if (typeof renderNotesSidebar === 'function') renderNotesSidebar();
+  if (typeof renderNotesBody === 'function') renderNotesBody();
+  showToast('↷ Redo');
+}
+
+// ─── Keyboard Shortcuts ───────────────────────────────────────────────────────
+function setupKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      scheduleSave();
+      showToast('💾 Saved');
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+      e.preventDefault();
+      if (typeof newAssignment === 'function') newAssignment();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+      e.preventDefault();
+      document.getElementById('export-btn')?.click();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+      e.preventDefault();
+      document.querySelector('[data-view="preview"]')?.click();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      document.querySelector('[data-view="checklist"]')?.click();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      undo();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+      e.preventDefault();
+      redo();
+    }
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-overlay, [style*="position:fixed"][style*="z-index:99"]')
+        .forEach(m => m.remove());
+    }
+  });
+}
+
+// ─── Statistics Dashboard ─────────────────────────────────────────────────────
+function showStatistics() {
+  const totalSections = state.outline.length;
+  const totalTarget = state.assignment.totalWords || 0;
+  const totalWritten = Object.values(state.progress || {}).reduce((a, b) => a + b, 0);
+  const completion = totalTarget > 0 ? Math.round((totalWritten / totalTarget) * 100) : 0;
+  const notesCount = Object.keys(state.notes || {}).length;
+  const refsCount = Object.values(state.notes || {}).reduce((a, n) => a + (n.citations?.length || 0), 0);
+  
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+  
+  overlay.innerHTML = `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:30px;max-width:500px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.4)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <h2 style="margin:0;color:var(--text);font-size:1.3rem">📊 Statistics</h2>
+        <button id="stats-close-btn" style="background:transparent;border:none;color:var(--muted);font-size:1.5rem;cursor:pointer;padding:0;width:30px;height:30px">✕</button>
+      </div>
+      <div style="display:grid;gap:12px">
+        <div style="display:flex;justify-content:space-between;padding:12px;background:var(--bg);border-radius:6px">
+          <span style="color:var(--muted)">Sections Created</span>
+          <strong style="color:var(--text)">${totalSections}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:12px;background:var(--bg);border-radius:6px">
+          <span style="color:var(--muted)">Words Written</span>
+          <strong style="color:var(--text)">${totalWritten.toLocaleString()} / ${totalTarget.toLocaleString()}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:12px;background:var(--bg);border-radius:6px">
+          <span style="color:var(--muted)">Completion</span>
+          <strong style="color:var(--accent)">${completion}%</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:12px;background:var(--bg);border-radius:6px">
+          <span style="color:var(--muted)">Notes Sections</span>
+          <strong style="color:var(--text)">${notesCount}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:12px;background:var(--bg);border-radius:6px">
+          <span style="color:var(--muted)">References</span>
+          <strong style="color:var(--text)">${refsCount}</strong>
+        </div>
+      </div>
+      <button id="stats-close-btn-2" style="width:100%;margin-top:20px;background:var(--accent);border:none;color:#fff;padding:10px;border-radius:var(--radius);cursor:pointer;font:inherit;font-size:0.9rem;font-weight:600">Close</button>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  
+  // Add event listeners AFTER adding to DOM (this is the fix!)
+  const closeBtn = document.getElementById('stats-close-btn');
+  const closeBtn2 = document.getElementById('stats-close-btn-2');
+  
+  closeBtn.addEventListener('click', () => overlay.remove());
+  closeBtn2.addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+}
+
+
+// ─── Model Selection Popup ────────────────────────────────────────────────────
+async function showModelSelectionPopup(title = "Select AI Model", currentModel = null) {
+  const models = await ollamaGetModels();
+  
+  if (!models.length) {
+    showToast('⚠️ No Ollama models found. Start Ollama and pull a model first.');
+    return null;
+  }
+
+  const preferred = AI_ANALYSIS_CONFIG?.preferredModels || ['llama3.2', 'llama3.2:3b', 'llama3', 'mistral', 'qwen2.5'];
+  const defaultModel = currentModel || 
+                       preferred.find(p => models.some(m => m.startsWith(p))) || 
+                       models[0];
+
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+    
+    overlay.innerHTML = `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:24px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.4)">
+        <h3 style="margin:0 0 8px;color:var(--text);font-size:1.1rem;font-weight:600">${title}</h3>
+        <p style="margin:0 0 16px;color:var(--muted);font-size:0.85rem">Choose an AI model to use for this task</p>
+        
+        <div style="margin-bottom:20px">
+          <label style="display:block;color:var(--muted);font-size:0.75rem;margin-bottom:6px;font-weight:600">AVAILABLE MODELS</label>
+          <select id="model-select" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:var(--radius);font:inherit;font-size:0.9rem;cursor:pointer">
+            ${models.map(m => `<option value="${m}" ${m === defaultModel ? 'selected' : ''}>${m}</option>`).join('')}
+          </select>
+          <div style="margin-top:8px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);font-size:0.75rem;color:var(--muted)">
+            <strong style="color:var(--accent-l)">💡 Tip:</strong> Larger models (7B+) give better quality. Smaller models (3B) are faster.
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button id="model-cancel" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:8px 20px;border-radius:var(--radius);cursor:pointer;font:inherit;font-size:0.9rem">Cancel</button>
+          <button id="model-start" style="background:var(--accent);border:none;color:#fff;padding:8px 20px;border-radius:var(--radius);cursor:pointer;font:inherit;font-size:0.9rem;font-weight:600">▶ Start</button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    setTimeout(() => document.getElementById('model-select')?.focus(), 100);
+    
+    document.getElementById('model-start').onclick = () => {
+      const selectedModel = document.getElementById('model-select').value;
+      overlay.remove();
+      resolve(selectedModel);
+    };
+    
+    document.getElementById('model-cancel').onclick = () => {
+      overlay.remove();
+      resolve(null);
+    };
+    
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        overlay.remove();
+        resolve(null);
+      }
+    });
+    
+    document.getElementById('model-select').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const selectedModel = document.getElementById('model-select').value;
+        overlay.remove();
+        resolve(selectedModel);
+      }
+    });
+  });
+}
 
 // ─── Academic data ────────────────────────────────────────────────────────────
 const VERBS = {
@@ -266,6 +479,9 @@ function applyStateSnapshot(saved) {
   document.getElementById('draft-stop-btn')?.addEventListener('click', () => { if (window._draftStop) window._draftStop(); });
   // New assignment
   document.getElementById('new-btn').addEventListener('click', newAssignment);
+  document.getElementById('stats-btn')?.addEventListener('click', showStatistics);
+  document.getElementById('undo-btn')?.addEventListener('click', undo);
+  document.getElementById('redo-btn')?.addEventListener('click', redo);
 }
 
 // ─── Deadline pill ────────────────────────────────────────────────────────────
@@ -391,27 +607,10 @@ function addSection(title = 'New Section', words = 200) {
 function loadTemplate(type) {
   if (!TEMPLATES[type]) return;
   if (state.outline.length && !confirm('Replace current outline with this template?')) return;
-  const total = state.assignment.totalWords || 2000;
-  state.outline = TEMPLATES[type].map(s => ({
-    id: Date.now().toString() + Math.random(),
-    title: s.title,
-    words: Math.round(total * s.pct / 100)
-  }));
-  state.outline.forEach(s => {
-    if (!state.notes[s.id]) state.notes[s.id] = { content: '', citations: [] };
-  });
-  // Reset active notes section since outline changed
-// end of loadTemplate(...)
-activeNotesSection = state.outline.length ? state.outline[0].id : null;
-renderOutline();
-scheduleSave();
-function loadTemplate(type) {
-  if (!TEMPLATES[type]) return;
-  if (state.outline.length && !confirm('Replace current outline with this template?')) return;
 
   const total = state.assignment.totalWords || 2000;
   state.outline = TEMPLATES[type].map(s => ({
-    id: Date.now().toString() + Math.random().toString(16).slice(2),
+    id: crypto.randomUUID(),
     title: s.title,
     words: Math.round(total * s.pct / 100)
   }));
@@ -425,13 +624,17 @@ function loadTemplate(type) {
   renderOutline();
   scheduleSave();
 
-  // Make sure window/input regain focus after the heavy DOM update
+  // FIX: Restore focus to window after template application
   setTimeout(() => {
-    const firstTitle = document.querySelector('.outline-section .os-title');
-    if (firstTitle) firstTitle.focus();
-    else window.focus();
-  }, 0);
-}
+    const firstInput = document.querySelector('.outline-section .os-title-input');
+    if (firstInput) {
+      firstInput.focus();
+      firstInput.select();
+    } else {
+      // If no input found, just click on the window to restore focus
+      document.body.focus();
+    }
+  }, 100);
 }
 function renderOutline() {
   const list = document.getElementById('outline-list');
@@ -1751,170 +1954,904 @@ function renderMarkdown(text) {
     .replace(/\n/g,'<br>');
 }
 
-// ─── AI Brief Analyser ────────────────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENHANCED AI BRIEF ANALYSIS SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Configuration for AI Analysis
+const AI_ANALYSIS_CONFIG = {
+  preferredModels: ['llama3.2', 'llama3.2:3b', 'llama3', 'mistral', 'gemma2', 'qwen2.5'],
+  analysisTypes: {
+    OVERVIEW: 'overview',
+    RESEARCH: 'research',
+    TIMELINE: 'timeline',
+    RUBRIC: 'rubric',
+    ARGUMENTS: 'arguments'
+  }
+};
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Enhanced AI Brief Analyser (REPLACES old analyseBriefWithAI)
+// ───────────────────────────────────────────────────────────────────────────────
+
 async function analyseBriefWithAI() {
   const text = document.getElementById('brief-text').value.trim();
-  if (!text) { showToast('Paste a brief first.'); return; }
-  const btn       = document.getElementById('ai-analyse-btn');
-  const resultsEl = document.getElementById('brief-results');
-
-  const models = await ollamaGetModels();
-  if (!models.length) {
-    resultsEl.innerHTML = `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;color:var(--muted);font-size:0.85rem;line-height:1.7">
-      <strong style="color:var(--rose)">Ollama not detected.</strong><br>
-      Make sure Ollama is running, then click AI Analyse again.<br>
-      No model? Run: <code style="background:var(--bg);padding:2px 6px;border-radius:4px">ollama pull llama3.2</code></div>`;
+  if (!text) {
+    showToast('Paste a brief first.');
     return;
   }
 
-  const preferred = ['llama3.2','llama3.2:3b','llama3','mistral','gemma3'];
-  if (!selectedAiModel || !models.includes(selectedAiModel))
-    selectedAiModel = preferred.find(p => models.some(n => n.startsWith(p))) || models[0];
+  // ✨ NEW: Show model selection popup
+  const model = await showModelSelectionPopup('Select Model for Brief Analysis', selectedAiModel);
+  if (!model) return; // User cancelled
+  
+  selectedAiModel = model;
+
+  const btn = document.getElementById('ai-analyse-btn');
+  const resultsEl = document.getElementById('brief-results');
 
   btn.textContent = '⏳ Analysing…';
   btn.disabled = true;
 
-  resultsEl.innerHTML = `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-      <span style="font-size:0.75rem;color:var(--muted)">Model:</span>
-      <select id="ai-model-sel" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:var(--radius);font:inherit;font-size:0.8rem">
-        ${models.map(n => `<option value="${n}"${n===selectedAiModel?' selected':''}>${n}</option>`).join('')}
-      </select>
-      <button id="ai-rerun-btn" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:var(--radius);font:inherit;font-size:0.75rem;cursor:pointer;white-space:nowrap;flex-shrink:0">🔄 Re-run</button>
+  resultsEl.innerHTML = createEnhancedAnalysisUI([model], model);
+  bindAnalysisUIEvents();
+  await runComprehensiveAnalysis(text, model);
+  
+  btn.textContent = '✨ AI Analyse';
+  btn.disabled = false;
+}
+
+function createEnhancedAnalysisUI(models, selectedModel) {
+  return `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+        <span style="font-size:0.75rem;color:var(--muted)">Model:</span>
+        <select id="ai-model-sel" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:var(--radius);font:inherit;font-size:0.8rem">
+          ${models.map(n => `<option value="${n}"${n === selectedModel ? ' selected' : ''}>${n}</option>`).join('')}
+        </select>
+        <button id="ai-rerun-btn" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:var(--radius);font:inherit;font-size:0.75rem;cursor:pointer;white-space:nowrap">
+          🔄 Re-run
+        </button>
+      </div>
+      <div class="analysis-tabs" style="display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:8px;overflow-x:auto;flex-wrap:wrap">
+        <button class="analysis-tab-btn active" data-type="overview" style="background:var(--accent);color:#fff;border:none;padding:6px 12px;border-radius:var(--radius);cursor:pointer;font:inherit;font-size:0.75rem;white-space:nowrap;flex-shrink:0">📋 Overview</button>
+        <button class="analysis-tab-btn" data-type="research" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 12px;border-radius:var(--radius);cursor:pointer;font:inherit;font-size:0.75rem;white-space:nowrap;flex-shrink:0">🔍 Research Plan</button>
+        <button class="analysis-tab-btn" data-type="timeline" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 12px;border-radius:var(--radius);cursor:pointer;font:inherit;font-size:0.75rem;white-space:nowrap;flex-shrink:0">⏱️ Timeline</button>
+        <button class="analysis-tab-btn" data-type="rubric" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 12px;border-radius:var(--radius);cursor:pointer;font:inherit;font-size:0.75rem;white-space:nowrap;flex-shrink:0">✅ Marking Rubric</button>
+        <button class="analysis-tab-btn" data-type="arguments" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 12px;border-radius:var(--radius);cursor:pointer;font:inherit;font-size:0.75rem;white-space:nowrap;flex-shrink:0">💡 Arguments</button>
+      </div>
+      <div id="analysis-panel-overview" class="analysis-panel" style="font-size:0.875rem;line-height:1.9;color:var(--text);min-height:200px">
+        <span style="color:var(--muted)">Analysing brief...</span>
+      </div>
+      <div id="analysis-panel-research" class="analysis-panel" style="display:none;font-size:0.875rem;line-height:1.9;color:var(--text);min-height:200px">
+        <button class="btn-primary" onclick="generateAnalysisForType('research')" style="width:100%">🔍 Generate Research Plan</button>
+      </div>
+      <div id="analysis-panel-timeline" class="analysis-panel" style="display:none;font-size:0.875rem;line-height:1.9;color:var(--text);min-height:200px">
+        <button class="btn-primary" onclick="generateAnalysisForType('timeline')" style="width:100%">⏱️ Generate Study Timeline</button>
+      </div>
+      <div id="analysis-panel-rubric" class="analysis-panel" style="display:none;font-size:0.875rem;line-height:1.9;color:var(--text);min-height:200px">
+        <button class="btn-primary" onclick="generateAnalysisForType('rubric')" style="width:100%">✅ Extract Marking Criteria</button>
+      </div>
+      <div id="analysis-panel-arguments" class="analysis-panel" style="display:none;font-size:0.875rem;line-height:1.9;color:var(--text);min-height:200px">
+        <button class="btn-primary" onclick="generateAnalysisForType('arguments')" style="width:100%">💡 Generate Argument Structures</button>
+      </div>
     </div>
-    <div id="ai-out" style="font-size:0.875rem;line-height:1.9;color:var(--text)"><span style="color:var(--muted)">Thinking…</span></div>
-  </div>`;
+  `;
+}
 
-  document.getElementById('ai-model-sel')?.addEventListener('change', e => { selectedAiModel = e.target.value; });
-  document.getElementById('ai-rerun-btn')?.addEventListener('click', analyseBriefWithAI);
+function createOllamaNotFoundMessage() {
+  return `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;color:var(--muted);font-size:0.85rem;line-height:1.7">
+      <strong style="color:var(--rose)">⚠️ Ollama not detected</strong><br><br>
+      Make sure Ollama is running, then click AI Analyse again.<br><br>
+      <strong>Recommended models for academic work:</strong><br>
+      <code style="background:var(--bg);padding:2px 6px;border-radius:4px;display:block;margin-top:8px">ollama pull llama3.2</code>
+      <code style="background:var(--bg);padding:2px 6px;border-radius:4px;display:block;margin-top:4px">ollama pull qwen2.5:7b</code>
+      <br>
+      <a href="https://ollama.com" target="_blank" style="color:var(--accent)">Download Ollama →</a>
+    </div>
+  `;
+}
 
-  const prompt = `You are an academic assignment analyst. Extract and summarise the KEY INFORMATION from this brief. Do NOT write any essay content, drafts, or references.
+function bindAnalysisUIEvents() {
+  document.getElementById('ai-model-sel')?.addEventListener('change', (e) => {
+    selectedAiModel = e.target.value;
+  });
 
-Respond with ONLY these sections:
+  document.getElementById('ai-rerun-btn')?.addEventListener('click', () => {
+    const activeTab = document.querySelector('.analysis-tab-btn.active');
+    if (activeTab) {
+      const type = activeTab.dataset.type;
+      if (type === 'overview') {
+        analyseBriefWithAI();
+      } else {
+        generateAnalysisForType(type);
+      }
+    }
+  });
 
-📋 ASSIGNMENT OVERVIEW
-- Type: (essay / report / literature review / case study / etc.)
-- Topic: (one sentence)
-- Word count: (extract from brief, or state "not specified")
-- Deadline: (if mentioned)
-- Module/Subject: (if mentioned)
+  document.querySelectorAll('.analysis-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.type;
+      
+      document.querySelectorAll('.analysis-tab-btn').forEach(b => {
+        b.style.background = 'transparent';
+        b.style.border = '1px solid var(--border)';
+        b.style.color = 'var(--muted)';
+        b.classList.remove('active');
+      });
+      btn.style.background = 'var(--accent)';
+      btn.style.border = 'none';
+      btn.style.color = '#fff';
+      btn.classList.add('active');
 
-🎯 WHAT YOU MUST DO
-List every task, question, or requirement as bullet points. Be specific.
+      document.querySelectorAll('.analysis-panel').forEach(p => {
+        p.style.display = 'none';
+      });
+      const panel = document.getElementById(`analysis-panel-${type}`);
+      panel.style.display = 'block';
+    });
+  });
+}
 
-📝 KEY INSTRUCTION VERBS
-For each command verb found, state exactly what it demands.
-
-📐 RECOMMENDED STRUCTURE
-Suggest section headings with approximate word counts that add up to ${state.assignment.totalWords||2000} words total. Format as:
-- Section name (~X words)
-
-⚠️ COMMON MISTAKES TO AVOID
-2-3 specific pitfalls for THIS type of assignment.
+async function runComprehensiveAnalysis(briefText, model) {
+  const panel = document.getElementById('analysis-panel-overview');
+  const totalWords = state.assignment.totalWords || 2000;
+  
+  const prompt = `You are an expert academic advisor helping a university student understand their assignment brief.
 
 ASSIGNMENT BRIEF:
-${text}
+${briefText}
 
-Remember: analyse and extract only. Do not write any content.`;
+TARGET WORD COUNT: ${totalWords} words
 
-  const out = document.getElementById('ai-out');
-  let full = '';
-  out.innerHTML = '';
-  ollamaStream(selectedAiModel, prompt,
-    chunk => { full += chunk; out.innerHTML = renderMarkdown(full); },
-    ()    => {
-      showToast('✅ Analysis complete!');
-      btn.textContent = '✨ AI Analyse';
-      btn.disabled = false;
-      // Add Apply Structure button at the bottom of AI output
-      const applyAiBtn = document.createElement('button');
-      applyAiBtn.className = 'btn-primary';
-      applyAiBtn.style.cssText = 'margin-top:16px;width:100%;font-size:0.8rem';
-      applyAiBtn.textContent = '📐 Apply Recommended Structure to Outline';
-      out.after(applyAiBtn);
-      applyAiBtn.addEventListener('click', async () => {
-        // Parse sections from the AI output text (lines starting with "- " under STRUCTURE)
-        const lines = full.split('\n');
-        const structStart = lines.findIndex(l => l.includes('RECOMMENDED STRUCTURE') || l.includes('Recommended Structure'));
-        const structEnd   = lines.findIndex((l, i) => i > structStart && l.trim().startsWith('#') || (i > structStart + 1 && l.trim() === ''));
-        const structLines = lines.slice(structStart + 1, structEnd > structStart ? structEnd : structStart + 15)
-          .filter(l => l.trim().startsWith('-') && l.includes('~'));
-        const parsed = structLines.map(l => {
-          const match = l.match(/-\s*(.+?)\s*\(~?(\d+)/);
-          return match ? { title: match[1].trim(), words: parseInt(match[2]) } : null;
-        }).filter(Boolean);
-        const items = parsed.length >= 2 ? parsed
-          : [{ title: 'Introduction', words: Math.round((state.assignment.totalWords||2000)*0.1) },
-             { title: 'Main Body',    words: Math.round((state.assignment.totalWords||2000)*0.7) },
-             { title: 'Conclusion',   words: Math.round((state.assignment.totalWords||2000)*0.2) }];
-        if (state.outline.length) {
-          const ok = await appConfirm('Apply ' + items.length + ' sections to your outline? This replaces your current outline.');
-          if (!ok) return;
-        }
-        state.outline = items.map(s => ({ id: crypto.randomUUID(), title: s.title, words: s.words }));
-        state.outline.forEach(s => { if (!state.notes[s.id]) state.notes[s.id] = { content: '', citations: [] }; });
-        activeNotesSection = state.outline[0]?.id || null;
-        renderOutline();
-        scheduleSave();
-        applyAiBtn.textContent = '✅ Applied! Go to Outline tab to review';
-        applyAiBtn.disabled = true;
-        showToast('✅ ' + items.length + ' sections applied to outline!');
-      });
-    },
-    err   => { out.innerHTML = `<span style="color:var(--rose)">Error: ${escHtml(err)}</span>`; btn.textContent = '✨ AI Analyse'; btn.disabled = false; }
-  );
+Provide a comprehensive analysis in the following format. Use markdown-style formatting.
+
+# 📋 ASSIGNMENT OVERVIEW
+- **Assignment Type:** [essay/report/case study/literature review/etc.]
+- **Subject Area:** [field of study]
+- **Topic Summary:** [1-2 sentences]
+- **Word Count:** [extract exact requirement]
+- **Submission Deadline:** [if mentioned, otherwise state "not specified"]
+- **Weighting/Marks:** [if mentioned, otherwise state "not specified"]
+
+# 🎯 CORE REQUIREMENTS
+List EVERY task, question, or requirement you found in the brief. Number them clearly.
+
+1. [First requirement]
+2. [Second requirement]
+3. [Continue...]
+
+# 📝 COMMAND VERBS DECODED
+For each instruction verb in the brief (analyse, evaluate, discuss, etc.), explain what it demands:
+
+- **[Verb]:** [What this verb requires you to do in academic writing]
+- **[Verb]:** [Continue...]
+
+# 🏆 ASSESSMENT CRITERIA
+Based on this brief, markers are likely looking for:
+- [Specific criterion 1]
+- [Specific criterion 2]
+- [Specific criterion 3]
+- [Continue...]
+
+# 📐 RECOMMENDED STRUCTURE
+Suggest ${state.outline.length > 0 ? state.outline.length : '5-7'} sections with word allocations totaling ${totalWords} words.
+
+Format each as: **Section name** (~X words) - brief description of what goes here
+
+# ⚠️ COMMON PITFALLS
+List 3-5 specific mistakes students make with THIS type of assignment:
+
+1. [Specific mistake and how to avoid it]
+2. [Continue...]
+
+# 💡 SUCCESS TIPS
+Provide 3-5 actionable tips for excelling at this specific brief:
+
+1. [Specific tip]
+2. [Continue...]
+
+Keep your tone supportive and academic. Be specific to THIS brief, not generic advice.`;
+  
+  let fullResponse = '';
+  panel.innerHTML = '';
+  
+  await new Promise((resolve) => {
+    ollamaStream(
+      model,
+      prompt,
+      (chunk) => {
+        fullResponse += chunk;
+        panel.innerHTML = renderMarkdown(fullResponse);
+      },
+      () => {
+        addOverviewActionButtons(panel, fullResponse);
+        showToast('✅ Analysis complete!');
+        resolve();
+      },
+      (err) => {
+        panel.innerHTML = `<span style="color:var(--rose)">Error: ${escHtml(err)}</span>`;
+        resolve();
+      }
+    );
+  });
 }
+
+async function generateAnalysisForType(type) {
+  const briefText = document.getElementById('brief-text').value.trim();
+  if (!briefText) {
+    showToast('No brief text found');
+    return;
+  }
+
+  const panel = document.getElementById(`analysis-panel-${type}`);
+  const model = selectedAiModel;
+  
+  const prompts = {
+    research: createResearchPlanPrompt(briefText),
+    timeline: createTimelinePrompt(briefText),
+    rubric: createRubricPrompt(briefText),
+    arguments: createArgumentsPrompt(briefText)
+  };
+  
+  const prompt = prompts[type];
+  if (!prompt) {
+    showToast('Unknown analysis type');
+    return;
+  }
+  
+  let fullResponse = '';
+  panel.innerHTML = '<span style="color:var(--muted)">Generating...</span>';
+  
+  await new Promise((resolve) => {
+    ollamaStream(
+      model,
+      prompt,
+      (chunk) => {
+        fullResponse += chunk;
+        panel.innerHTML = renderMarkdown(fullResponse);
+      },
+      () => {
+        addTypeSpecificActionButtons(panel, type, fullResponse);
+        showToast(`✅ ${type.charAt(0).toUpperCase() + type.slice(1)} analysis complete!`);
+        resolve();
+      },
+      (err) => {
+        panel.innerHTML = `<span style="color:var(--rose)">Error: ${escHtml(err)}</span>`;
+        resolve();
+      }
+    );
+  });
+}
+
+function createResearchPlanPrompt(briefText) {
+  return `You are a research librarian helping a student plan their research strategy.
+
+ASSIGNMENT BRIEF:
+${briefText}
+
+Create a detailed, actionable research plan:
+
+# 🔍 RESEARCH QUESTIONS
+Generate 5-7 focused research questions that directly address this brief's requirements.
+
+1. [Primary question addressing main brief requirement]
+2. [Secondary question]
+3. [Continue...]
+
+# 📚 KEY SEARCH TERMS
+
+**Primary Keywords:** [5-8 core terms from the brief]
+**Related Concepts:** [5-8 broader/related terms]
+**Alternative Phrasings:** [3-5 synonyms or variations]
+**Boolean Operators:** [Suggested AND/OR/NOT combinations]
+
+# 🏛️ RECOMMENDED DATABASES
+
+1. **[Database name]:** Why it's useful for this topic
+2. **[Database name]:** Why it's useful for this topic
+3. [Continue for 4-6 databases]
+
+# 📖 LITERATURE TYPES
+
+- **Peer-reviewed Journals:** [Specific journal names if possible, or types]
+- **Seminal Texts:** [Foundational works you should look for]
+- **Recent Publications:** Why currency matters for this topic
+- **Alternative Sources:** [Grey literature, reports, etc. if relevant]
+
+# 🔎 SEARCH STRATEGY
+
+Provide 3-4 actual search strings using Boolean operators. Example format:
+- \`"keyword1" AND ("keyword2" OR "keyword3") NOT "keyword4"\`
+
+# 📊 SOURCE EVALUATION
+
+How to judge if a source is credible and relevant for THIS assignment:
+- [Criterion 1]
+- [Criterion 2]
+- [Continue...]
+
+# ⏱️ RESEARCH TIMELINE
+
+Suggest realistic time allocation:
+- Initial search & skim: X hours
+- Deep reading: X hours
+- Note-taking: X hours
+- Source organization: X hours
+
+Be specific and practical for a university student.`;
+}
+
+function createTimelinePrompt(briefText) {
+  const deadline = state.assignment.deadline;
+  const today = new Date().toISOString().split('T')[0];
+  const wordCount = state.assignment.totalWords || 2000;
+  
+  return `You are an academic study skills advisor creating a realistic work timeline.
+
+ASSIGNMENT BRIEF:
+${briefText}
+
+TODAY'S DATE: ${today}
+${deadline ? `DEADLINE: ${deadline}` : 'DEADLINE: Not specified (assume 4 weeks from today)'}
+WORD COUNT: ${wordCount} words
+
+Create a detailed, realistic timeline with specific tasks:
+
+# 📅 WEEKLY BREAKDOWN
+
+## Week 1: Research Foundation
+**Goal:** Complete initial research and planning
+
+- **Day 1-2:** [Specific tasks]
+- **Day 3-4:** [Specific tasks]
+- **Day 5-7:** [Specific tasks]
+
+**📊 Checkpoint:** [What should be achieved by end of week 1]
+
+## Week 2: Deep Research & Structure
+**Goal:** [Describe goal]
+
+- **Day 1-3:** [Specific tasks]
+- **Day 4-7:** [Specific tasks]
+
+**📊 Checkpoint:** [What should be achieved]
+
+## Week 3: Main Writing Phase
+**Goal:** [Describe goal]
+
+[Continue pattern...]
+
+## Week 4: Review & Polish
+**Goal:** Complete assignment to submission standard
+
+[Final week tasks]
+
+# ⏰ DAILY STUDY SESSIONS
+
+**Recommended Session Structure:**
+- Study session length: [X] minutes
+- Break frequency: [X] minutes
+- Sessions per day: [X]
+- Best times: [morning/afternoon/evening for this work type]
+
+# 🚨 BUFFER TIME
+
+- Built-in buffer for revisions: [X days]
+- Contingency for setbacks: [X days]
+- Final proofread buffer: [X days]
+
+# ✅ WEEKLY CHECKPOINTS
+
+**Week 1:** [Specific question to ask yourself]
+**Week 2:** [Specific question]
+**Week 3:** [Specific question]
+**Week 4:** [Specific question]
+
+# 🎯 PROGRESS TRACKING
+
+Track these metrics weekly:
+- [Metric 1]
+- [Metric 2]
+- [Metric 3]
+
+Be realistic about student workload and include actual time estimates (hours).`;
+}
+
+function createRubricPrompt(briefText) {
+  return `You are an assessment expert extracting marking criteria from an assignment brief.
+
+ASSIGNMENT BRIEF:
+${briefText}
+
+Extract and organize assessment criteria that markers will use:
+
+# ✅ EXPLICIT CRITERIA
+List any marking criteria DIRECTLY stated in the brief:
+
+1. **[Criterion]:** [Description] — likely worth ~X%
+2. **[Criterion]:** [Description] — likely worth ~X%
+[Continue...]
+
+# 🎯 IMPLIED CRITERIA
+Based on the brief type and academic standards, markers will also assess:
+
+- **[Criterion]:** Why this matters for this assignment
+- **[Criterion]:** Why this matters
+[Continue...]
+
+# 📊 ESTIMATED GRADING BREAKDOWN
+
+- **Content & Understanding:** X%
+- **Critical Analysis & Evaluation:** X%
+- **Structure & Organization:** X%
+- **Academic Writing Quality:** X%
+- **Research & Referencing:** X%
+- **[Other criteria]:** X%
+
+**Total:** 100%
+
+# 🏆 DISTINCTION LEVEL (70%+)
+To achieve top marks (70-100%), your work must:
+
+1. [Specific, measurable requirement]
+2. [Specific, measurable requirement]
+3. [Continue for 5-7 items]
+
+# ✔️ MERIT LEVEL (60-69%)
+To achieve good marks (60-69%), your work must:
+
+1. [Specific requirement]
+2. [Continue for 4-5 items]
+
+# 📍 PASS LEVEL (40-59%)
+Minimum requirements to pass:
+
+1. [Essential requirement]
+2. [Continue for 3-4 items]
+
+# ❌ COMMON MARK DEDUCTIONS
+
+- **[Issue]:** Typical deduction: -X marks or X%
+- **[Issue]:** Typical deduction: -X marks or X%
+[Continue for 5-8 common issues]
+
+# ✅ PRE-SUBMISSION CHECKLIST
+
+Before you submit, verify:
+☐ [Specific item to check]
+☐ [Specific item to check]
+[Continue for 10-15 items]
+
+Be specific to THIS brief. Include percentage estimates where possible.`;
+}
+
+function createArgumentsPrompt(briefText) {
+  const wordCount = state.assignment.totalWords || 2000;
+  
+  return `You are an academic writing tutor helping structure arguments.
+
+ASSIGNMENT BRIEF:
+${briefText}
+
+WORD COUNT: ${wordCount} words
+
+Help the student develop strong, well-structured arguments:
+
+# 💡 POSSIBLE THESIS STATEMENTS
+
+Generate 3-5 potential thesis statements that DIRECTLY answer the assignment question.
+
+## Option 1: [Descriptive title]
+**Thesis:** "[Complete thesis statement]"
+
+**Rationale:** Why this thesis works for this brief
+**Strength:** What makes this approach strong
+**Challenge:** What you'll need to address
+
+## Option 2: [Descriptive title]
+[Continue same format for 3-5 options]
+
+# 🏗️ ARGUMENT STRUCTURE OPTIONS
+
+## Structure A: Classical Argument
+- Introduction with clear thesis
+- Background/Context (~X words)
+- Argument 1 + Evidence (~X words)
+- Argument 2 + Evidence (~X words)
+- Argument 3 + Evidence (~X words)
+- Counter-argument (~X words)
+- Rebuttal (~X words)
+- Conclusion (~X words)
+
+**Best for:** [When to use this structure for THIS assignment]
+
+## Structure B: [Alternative name]
+[Provide 2-3 structural options total]
+
+# 📝 KEY ARGUMENTS TO ADDRESS
+
+Based on the brief, you MUST discuss:
+
+## 1. [Required theme/argument]
+- **Evidence needed:** [Type of evidence]
+- **Key points to cover:** [Specific points]
+- **Counter-perspectives:** [What to address]
+- **Word allocation:** ~X words
+
+## 2. [Required theme/argument]
+[Continue for all major required arguments]
+
+# 🔗 ARGUMENT FLOW & TRANSITIONS
+
+**Introduction → First Point:**
+[Specific transitional approach]
+
+**Between Main Points:**
+[Linking strategy]
+
+**To Counter-argument:**
+[How to introduce opposing views]
+
+**To Conclusion:**
+[Strategy for final section]
+
+# ⚖️ CONTENT BALANCE (for ${wordCount} words)
+
+- Introduction: ~${Math.round(wordCount * 0.1)} words (10%)
+- Main arguments: ~${Math.round(wordCount * 0.7)} words (70%)
+- Counter-arguments: ~${Math.round(wordCount * 0.1)} words (10%)
+- Conclusion: ~${Math.round(wordCount * 0.1)} words (10%)
+
+# 🎯 PERSUASION TECHNIQUES
+
+For THIS assignment type, use:
+
+1. **[Technique]:** When and how to apply it
+2. **[Technique]:** When and how to apply it
+[Continue for 4-6 techniques]
+
+# 🚫 ARGUMENT PITFALLS TO AVOID
+
+1. **[Common mistake]:** Why it weakens your argument
+2. **[Common mistake]:** Why it weakens your argument
+[Continue...]
+
+Be specific to the brief's requirements and the assignment type.`;
+}
+
+function addOverviewActionButtons(panel, analysisText) {
+  const actionsDiv = document.createElement('div');
+  actionsDiv.style.cssText = 'margin-top:20px;padding-top:16px;border-top:1px solid var(--border)';
+  actionsDiv.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-primary" id="apply-structure-btn" style="flex:1;min-width:180px;font-size:0.85rem">
+        📐 Apply Structure to Outline
+      </button>
+      <button class="btn-ghost" id="copy-analysis-btn" style="font-size:0.85rem">
+        📋 Copy All
+      </button>
+      <button class="btn-ghost" id="extract-dates-btn" style="font-size:0.85rem">
+        📅 Extract Dates
+      </button>
+    </div>
+  `;
+  
+  panel.appendChild(actionsDiv);
+  
+  document.getElementById('apply-structure-btn')?.addEventListener('click', async () => {
+    await applyStructureFromAnalysis(analysisText);
+  });
+  
+  document.getElementById('copy-analysis-btn')?.addEventListener('click', () => {
+    navigator.clipboard.writeText(analysisText);
+    showToast('📋 Analysis copied to clipboard!');
+  });
+  
+  document.getElementById('extract-dates-btn')?.addEventListener('click', () => {
+    extractAndApplyDeadline(analysisText);
+  });
+}
+
+function addTypeSpecificActionButtons(panel, type, content) {
+  const actionsDiv = document.createElement('div');
+  actionsDiv.style.cssText = 'margin-top:20px;padding-top:16px;border-top:1px solid var(--border)';
+  
+  const actionConfigs = {
+    research: {
+      buttons: [
+        { id: 'copy-search-terms', text: '📋 Copy Search Terms', action: () => copySearchTerms(content) },
+        { id: 'open-scholar', text: '🔗 Open Google Scholar', action: () => window.open('https://scholar.google.com/', '_blank') },
+        { id: 'copy-all-research', text: '📄 Copy All', action: () => {navigator.clipboard.writeText(content); showToast('Copied!');} }
+      ]
+    },
+    timeline: {
+      buttons: [
+        { id: 'copy-timeline', text: '📋 Copy Timeline', action: () => {navigator.clipboard.writeText(content); showToast('Timeline copied!');} }
+      ]
+    },
+    rubric: {
+      buttons: [
+        { id: 'add-to-checklist', text: '✅ Add Criteria to Checklist', action: () => createChecklistFromRubric(content) },
+        { id: 'copy-rubric', text: '📋 Copy Rubric', action: () => {navigator.clipboard.writeText(content); showToast('Rubric copied!');} }
+      ]
+    },
+    arguments: {
+      buttons: [
+        { id: 'apply-thesis', text: '💡 Add Thesis to Notes', action: () => applyThesisToNotes(content) },
+        { id: 'copy-arguments', text: '📋 Copy Arguments', action: () => {navigator.clipboard.writeText(content); showToast('Arguments copied!');} }
+      ]
+    }
+  };
+  
+  const config = actionConfigs[type];
+  if (!config) return;
+  
+  actionsDiv.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${config.buttons.map(btn => `
+        <button class="btn-ghost" id="${btn.id}" style="font-size:0.85rem">
+          ${btn.text}
+        </button>
+      `).join('')}
+    </div>
+  `;
+  
+  panel.appendChild(actionsDiv);
+  
+  config.buttons.forEach(btn => {
+    document.getElementById(btn.id)?.addEventListener('click', btn.action);
+  });
+}
+
+async function applyStructureFromAnalysis(analysisText) {
+  const lines = analysisText.split('\n');
+  const structStart = lines.findIndex(l => 
+    l.toUpperCase().includes('RECOMMENDED STRUCTURE') || 
+    l.toUpperCase().includes('STRUCTURE')
+  );
+  
+  if (structStart === -1) {
+    showToast('⚠️ Could not find structure recommendations');
+    return;
+  }
+  
+  const structEnd = lines.findIndex((l, i) => 
+    i > structStart && (l.trim().startsWith('#') || (i > structStart + 20))
+  );
+  
+  const structLines = lines.slice(structStart + 1, structEnd > structStart ? structEnd : structStart + 20)
+    .filter(l => /^[-•*]|\d+\./.test(l.trim()) && /\d+/.test(l));
+  
+  const parsed = structLines.map(l => {
+    const match = l.match(/[-•*\d.]\s*\*?\*?([^(~\d]+)[\s(~]*(\d+)/);
+    if (match) {
+      let title = match[1].trim().replace(/\*\*/g, '').replace(/^['"]|['"]$/g, '');
+      const words = parseInt(match[2]);
+      title = title.replace(/\s*-\s*$/, '').trim();
+      return { title, words };
+    }
+    return null;
+  }).filter(Boolean);
+  
+  if (parsed.length < 2) {
+    showToast('⚠️ Could not parse structure. Using defaults.');
+    const total = state.assignment.totalWords || 2000;
+    parsed.length = 0;
+    parsed.push(
+      { title: 'Introduction', words: Math.round(total * 0.1) },
+      { title: 'Main Body', words: Math.round(total * 0.7) },
+      { title: 'Conclusion', words: Math.round(total * 0.2) }
+    );
+  }
+  
+  if (state.outline.length > 0) {
+    const confirmed = await appConfirm(
+      `Apply ${parsed.length} sections to your outline?\n\nThis will replace your current ${state.outline.length} section(s).`
+    );
+    if (!confirmed) return;
+  }
+  
+  state.outline = parsed.map(s => ({
+    id: crypto.randomUUID(),
+    title: s.title,
+    words: s.words
+  }));
+  
+  state.outline.forEach(s => {
+    if (!state.notes[s.id]) {
+      state.notes[s.id] = { content: '', citations: [] };
+    }
+  });
+  
+  activeNotesSection = state.outline[0]?.id || null;
+  renderOutline();
+  scheduleSave();
+  showToast(`✅ ${parsed.length} sections applied to outline!`);
+}
+
+function copySearchTerms(content) {
+  const lines = content.split('\n');
+  const keywordSection = [];
+  let inKeywordSection = false;
+  
+  for (const line of lines) {
+    if (line.match(/KEY SEARCH TERMS|Primary Keywords|Related Concepts/i)) {
+      inKeywordSection = true;
+    } else if (inKeywordSection && line.startsWith('#')) {
+      break;
+    } else if (inKeywordSection && line.trim()) {
+      keywordSection.push(line);
+    }
+  }
+  
+  const text = keywordSection.length > 0 ? keywordSection.join('\n') : content;
+  navigator.clipboard.writeText(text);
+  showToast('🔍 Search terms copied to clipboard!');
+}
+
+function extractAndApplyDeadline(content) {
+  const patterns = [
+    /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/,
+    /(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/,
+    /(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{2,4})/i
+  ];
+  
+  for (const pattern of patterns) {
+    const match = content.match(pattern);
+    if (match) {
+      const dateStr = match[0];
+      document.getElementById('asgn-deadline').value = dateStr;
+      state.assignment.deadline = dateStr;
+      updateDeadlinePill();
+      scheduleSave();
+      showToast(`📅 Deadline set to ${dateStr}`);
+      return;
+    }
+  }
+  
+  showToast('⚠️ No clear deadline found in analysis');
+}
+
+function createChecklistFromRubric(content) {
+  const lines = content.split('\n');
+  const checklistItems = [];
+  
+  const checklistStart = lines.findIndex(l => l.includes('CHECKLIST') || l.includes('Before you submit'));
+  
+  if (checklistStart !== -1) {
+    for (let i = checklistStart + 1; i < lines.length && i < checklistStart + 30; i++) {
+      const line = lines[i].trim();
+      if (line.match(/^[-☐✓•*]\s+/) || line.match(/^\d+\.\s+/)) {
+        const text = line.replace(/^[-☐✓•*\d.]\s*/, '').trim();
+        if (text.length > 10 && text.length < 200) {
+          checklistItems.push(text);
+        }
+      }
+      if (line.startsWith('#')) break;
+    }
+  }
+  
+  if (checklistItems.length === 0) {
+    lines.forEach(line => {
+      if (line.match(/^[-•*]\s+/) || line.match(/^\d+\.\s+/)) {
+        const text = line.replace(/^[-•*\d.]\s*/, '').replace(/\*\*/g, '').trim();
+        if (text.length > 15 && text.length < 200 && !text.startsWith('#')) {
+          checklistItems.push(text);
+        }
+      }
+    });
+  }
+  
+  if (checklistItems.length === 0) {
+    showToast('⚠️ No checklist items found in rubric');
+    return;
+  }
+  
+  let added = 0;
+  checklistItems.slice(0, 15).forEach(text => {
+    const id = 'rubric-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    if (!Object.values(state.checklist).includes(text)) {
+      state.checklist[id] = false;
+      added++;
+    }
+  });
+  
+  scheduleSave();
+  renderChecklist();
+  showToast(`✅ Added ${added} criteria to checklist!`);
+}
+
+function applyThesisToNotes(content) {
+  const lines = content.split('\n');
+  let thesis = '';
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.includes('Thesis:') || line.includes('Option 1:')) {
+      for (let j = i; j < Math.min(i + 5, lines.length); j++) {
+        const candidate = lines[j].replace(/^\*\*Thesis:\*\*|^Thesis:/i, '').trim();
+        if (candidate && !candidate.startsWith('#') && !candidate.includes('Option') && candidate.length > 20) {
+          thesis = candidate.replace(/^["']|["']$/g, '');
+          break;
+        }
+      }
+      if (thesis) break;
+    }
+  }
+  
+  if (!thesis) {
+    showToast('⚠️ No thesis statement found');
+    return;
+  }
+  
+  if (state.outline.length === 0) {
+    const introSection = {
+      id: crypto.randomUUID(),
+      title: 'Introduction',
+      words: Math.round((state.assignment.totalWords || 2000) * 0.1)
+    };
+    state.outline.unshift(introSection);
+    state.notes[introSection.id] = { content: '', citations: [] };
+  }
+  
+  const firstSection = state.outline[0];
+  if (!state.notes[firstSection.id]) {
+    state.notes[firstSection.id] = { content: '', citations: [] };
+  }
+  
+  const thesisNote = `📝 **THESIS STATEMENT**\n${thesis}\n\n---\n\n`;
+  
+  if (!state.notes[firstSection.id].content.includes(thesis)) {
+    state.notes[firstSection.id].content = thesisNote + state.notes[firstSection.id].content;
+    scheduleSave();
+    renderOutline();
+    showToast(`💡 Thesis added to "${firstSection.title}" notes!`);
+  } else {
+    showToast('ℹ️ Thesis already in notes');
+  }
+}
+
 
 // ─── AI Draft Checker ─────────────────────────────────────────────────────────
 async function aiCheckDraft() {
   const text = document.getElementById('checker-textarea').value.trim();
-  if (!text) { showToast('Paste your draft text first.'); return; }
-  const btn       = document.getElementById('ai-checker-btn');
-  const resultsEl = document.getElementById('checker-results');
-
-  const models = await ollamaGetModels();
-  if (!models.length) {
-    resultsEl.innerHTML = `<div class="check-block open"><div class="check-block-header"><span class="check-block-title">Ollama Not Running</span></div>
-      <div class="check-block-body" style="display:block">Start Ollama, then click ✨ AI Check again.<br>
-      Run <code>ollama pull llama3.2</code> if you need a model.</div></div>`;
+  if (!text) {
+    showToast('⚠️ Paste your draft text first.');
     return;
   }
 
-  const preferred = ['llama3.2','llama3.2:3b','llama3','mistral','gemma3'];
-  if (!selectedAiModel || !models.includes(selectedAiModel))
-    selectedAiModel = preferred.find(p => models.some(n => n.startsWith(p))) || models[0];
+  // Show model selection popup
+  const model = await showModelSelectionPopup('Select Model for Draft Checking', selectedAiModel);
+  if (!model) return;
+  
+  selectedAiModel = model;
 
+  const btn = document.getElementById('ai-checker-btn');
+  const resultsEl = document.getElementById('checker-results');
   const wordCount = text.split(/\s+/).length;
-  const brief     = state.assignment.brief?.trim() || '';
+  const brief = state.assignment.brief?.trim() || '';
+  
   btn.textContent = '⏳ Checking…';
-  btn.disabled    = true;
+  btn.disabled = true;
 
-  // Build output elements directly — avoids getElementById stale-reference bug
   const outDiv = document.createElement('div');
   outDiv.style.cssText = 'font-size:0.875rem;line-height:1.9;color:var(--text)';
   outDiv.innerHTML = '<span style="color:var(--muted)">Reading draft…</span>';
 
-  const modelRow = document.createElement('div');
-  modelRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:10px';
-  modelRow.innerHTML = `<span style="font-size:0.75rem;color:var(--muted)">Model:</span>
-    <select id="check-model-sel" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:var(--radius);font:inherit;font-size:0.8rem">
-      ${models.map(n => `<option value="${n}"${n===selectedAiModel?' selected':''}>${n}</option>`).join('')}
-    </select>
-    <button id="check-rerun-btn" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:var(--radius);font:inherit;font-size:0.75rem;cursor:pointer;white-space:nowrap">🔄 Re-run</button>`;
-
   const wrapper = document.createElement('div');
   wrapper.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px';
+  
   const meta = document.createElement('p');
   meta.style.cssText = 'color:var(--muted);font-size:0.75rem;margin:0 0 12px';
-  meta.textContent = `AI Feedback · ${wordCount.toLocaleString()} words · ${selectedAiModel}`;
-  wrapper.appendChild(modelRow);
+  meta.textContent = `AI Feedback · ${wordCount.toLocaleString()} words · ${model}`;
+  
   wrapper.appendChild(meta);
   wrapper.appendChild(outDiv);
   resultsEl.innerHTML = '';
   resultsEl.appendChild(wrapper);
-
-  document.getElementById('check-model-sel')?.addEventListener('change', e => { selectedAiModel = e.target.value; });
-  document.getElementById('check-rerun-btn')?.addEventListener('click', aiCheckDraft);
 
   const prompt = `You are a strict academic checker. Return ONLY direct feedback on the student's draft.
 
@@ -1923,22 +2860,15 @@ Rules:
 - Do NOT write as a teacher, lecturer, or named person.
 - Do NOT add "Dear student" or any salutation.
 - Do NOT include markdown headings beyond the six required sections.
-- Do NOT mention references unless you are pointing out missing citations in the draft.
 - Be factual, concise, and specific.
 
-Use exactly these six headings and nothing else:
+Use exactly these six headings:
 1. Brief Alignment
 2. Academic Tone
 3. Argument & Structure
 4. Cohesion & Flow
 5. Citation Gaps
 6. Overall & Grade Estimate
-
-For each heading:
-- Use 2-5 bullet points.
-- Quote short phrases from the draft when giving examples.
-- If a section is weak, say exactly why.
-- End with a short overall grade band only in the last heading.
 
 BRIEF:
 ${brief || 'Not provided'}
@@ -1948,12 +2878,27 @@ ${text}`;
 
   let full = '';
   outDiv.innerHTML = '';
-  ollamaStream(selectedAiModel, prompt,
-    chunk => { full += chunk; outDiv.innerHTML = renderMarkdown(full); },
-    ()    => { showToast('✅ Check complete!'); btn.textContent = '✨ AI Check'; btn.disabled = false; },
-    err   => { outDiv.innerHTML = `<span style="color:var(--rose)">Error: ${escHtml(err)}</span>`; btn.textContent = '✨ AI Check'; btn.disabled = false; }
+  
+  ollamaStream(
+    model,
+    prompt,
+    (chunk) => {
+      full += chunk;
+      outDiv.innerHTML = renderMarkdown(full);
+    },
+    () => {
+      showToast('✅ Check complete!');
+      btn.textContent = '✨ AI Check';
+      btn.disabled = false;
+    },
+    (err) => {
+      outDiv.innerHTML = `<span style="color:var(--rose)">Error: ${escHtml(err)}</span>`;
+      btn.textContent = '✨ AI Check';
+      btn.disabled = false;
+    }
   );
 }
+
 
 // ─── AI Draft Starter ─────────────────────────────────────────────────────────
 async function initDraftView() {
@@ -1988,29 +2933,53 @@ sel.innerHTML = models.map(n => `<option value="${escHtml(n)}"...>${escHtml(n)}<
 }
 
 async function generateDraft() {
-  if (!state.outline?.length) { showToast('Build your outline first.'); return; }
-  const model = document.getElementById('draft-model-select')?.value || selectedAiModel;
-  if (!model || model.includes('⚠️')) { showToast('Select a model first.'); return; }
-  const isFull    = document.getElementById('draft-full-toggle')?.checked || false;
-  const genBtn    = document.getElementById('draft-generate-btn');
-  const stopBtn   = document.getElementById('draft-stop-btn');
-  const output    = document.getElementById('draft-output');
-  const total     = state.outline.length;
-  let   stopped   = false;
-  window._draftStop = () => { stopped = true; window.api.removeAllOllamaListeners(); stopBtn.style.display = 'none'; genBtn.style.display = ''; };
+  if (!state.outline.length) {
+    showToast('⚠️ Build your outline first');
+    return;
+  }
+
+  // ✨ NEW: Show model selection popup
+  const model = await showModelSelectionPopup('Select Model for Draft Generation', selectedAiModel);
+  if (!model) return; // User cancelled
+  
+  selectedAiModel = model;
+
+  const isFull = await appConfirm(
+    'Generate full draft?\n\n' +
+    '✅ YES = Complete paragraphs for each section\n' +
+    '📝 NO = Opening paragraphs only (faster)'
+  );
+
+  const genBtn = document.getElementById('draft-generate-btn');
+  const stopBtn = document.getElementById('draft-stop-btn');
+  const output = document.getElementById('draft-output');
+  const total = state.outline.length;
+  let stopped = false;
+  
+  window._draftStop = () => {
+    stopped = true;
+    window.api.removeAllOllamaListeners();
+    stopBtn.style.display = 'none';
+    genBtn.style.display = '';
+  };
+  
   genBtn.style.display = 'none';
   stopBtn.style.display = '';
 
   output.innerHTML = `
     <div id="dp-wrap" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:var(--muted);margin-bottom:6px">
-        <span id="dp-label">Starting…</span><span id="dp-count">0 / ${total}</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div>
+          <div style="font-size:0.8rem;color:var(--text);font-weight:600;margin-bottom:4px">🤖 Using: ${escHtml(model)}</div>
+          <div id="dp-label" style="font-size:0.75rem;color:var(--muted)">Starting…</div>
+        </div>
+        <span id="dp-count" style="font-size:0.75rem;color:var(--muted)">0 / ${total}</span>
       </div>
       <div style="height:6px;background:var(--border);border-radius:4px;overflow:hidden">
         <div id="dp-fill" style="height:100%;width:0%;background:var(--accent);border-radius:4px;transition:width 0.4s"></div>
       </div>
     </div>
-    ${state.outline.map((s,i) => `
+    ${state.outline.map((s, i) => `
     <div class="draft-section-card" id="dsc-${i}">
       <div class="draft-section-header">
         <span class="draft-section-title">${escHtml(s.title)}</span>
@@ -2019,6 +2988,7 @@ async function generateDraft() {
       </div>
       <div id="db-${i}" class="draft-section-body" style="color:var(--muted);font-style:italic;font-size:0.8rem">Waiting…</div>
     </div>`).join('')}`;
+
 
   for (let i = 0; i < state.outline.length; i++) {
     if (stopped) break;
@@ -2147,6 +3117,35 @@ RULES:
   genBtn.style.display = '';
   stopBtn.style.display = 'none';
   if (!stopped) showToast(collectedRefs.length ? '✅ Draft done — refs collected at bottom!' : '✅ Draft complete!');
+}
+function reattachAnalysisListeners() {
+  // Re-run button
+  const rerunBtn = document.getElementById('rerun-analysis');
+  if (rerunBtn) {
+    rerunBtn.addEventListener('click', async () => {
+      const model = await showModelSelectionPopup('Select Model for Brief Analysis', selectedAiModel);
+      if (!model) return;
+      selectedAiModel = model;
+      runBriefAnalysis(model);
+    });
+  }
+
+  // Generate buttons for each analysis type
+  const generateBtns = document.querySelectorAll('[id^="gen-"]');
+  generateBtns.forEach(btn => {
+    const type = btn.id.replace('gen-', '');
+    btn.addEventListener('click', async () => {
+      const model = await showModelSelectionPopup(`Generate ${type.charAt(0).toUpperCase() + type.slice(1)}`, selectedAiModel);
+      if (!model) return;
+      selectedAiModel = model;
+      
+      // Call appropriate generation function
+      if (type === 'research') generateResearchPlan(model);
+      else if (type === 'timeline') generateTimeline(model);
+      else if (type === 'rubric') generateRubric(model);
+      else if (type === 'arguments') generateArguments(model);
+    });
+  });
 }
 
 // ─── Start ────────────────────────────────────────────────────────────────────
