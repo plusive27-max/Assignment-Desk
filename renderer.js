@@ -1,3 +1,5 @@
+// Rich Editor loaded via <script> tag in index.html
+// Available as window.RichEditor
 
 window.addEventListener('unhandledrejection', (event) => {
   alert('Promise error:\n' + event.reason);
@@ -15,148 +17,406 @@ let activeNotesSection = null;
 let saveTimer          = null;
 let wcInitialised      = false;
 let notesSearchQuery = '';
+let lastRenderedNotesSection = null;
 
+// FOCUS MODE
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// NEW FEATURES - Undo/Redo, Keyboard Shortcuts, Statistics
-// ═══════════════════════════════════════════════════════════════════════════════
+let focusModeActive = false;
+let focusModeSectionId = null;
+let focusModeStartTime = null;
+let focusModeTimer = null;
 
-// ─── Undo/Redo System ─────────────────────────────────────────────────────────
-const undoStack = [];
-const redoStack = [];
-const MAX_UNDO = 50;
-
-function saveUndoState() {
-  undoStack.push(JSON.stringify({ outline: state.outline, notes: state.notes }));
-  if (undoStack.length > MAX_UNDO) undoStack.shift();
-  redoStack.length = 0;
-}
-
-function undo() {
-  if (!undoStack.length) {
-    showToast('⚠️ Nothing to undo');
+function enterFocusMode(sectionId) {
+  if (!sectionId) {
+    showToast('⚠️ Select a section first');
     return;
   }
-  redoStack.push(JSON.stringify({ outline: state.outline, notes: state.notes }));
-  const prev = JSON.parse(undoStack.pop());
-  state.outline = prev.outline;
-  state.notes = prev.notes;
-  renderOutline();
-  if (typeof renderNotesSidebar === 'function') renderNotesSidebar();
-  if (typeof renderNotesBody === 'function') renderNotesBody();
-  showToast('↶ Undo');
-}
 
-function redo() {
-  if (!redoStack.length) {
-    showToast('⚠️ Nothing to redo');
+  const section = state.outline.find(s => s.id === sectionId);
+  if (!section) {
+    showToast('⚠️ Section not found');
     return;
   }
-  undoStack.push(JSON.stringify({ outline: state.outline, notes: state.notes }));
-  const next = JSON.parse(redoStack.pop());
-  state.outline = next.outline;
-  state.notes = next.notes;
-  renderOutline();
-  if (typeof renderNotesSidebar === 'function') renderNotesSidebar();
-  if (typeof renderNotesBody === 'function') renderNotesBody();
-  showToast('↷ Redo');
+
+  focusModeActive = true;
+  focusModeSectionId = sectionId;
+  focusModeStartTime = Date.now();
+
+  // Get current content from notes
+  const note = state.notes[sectionId];
+  const content = note?.content || '';
+
+  // Show overlay
+  const overlay = document.getElementById('focus-mode');
+  const editor = document.getElementById('focus-editor');
+  const title = document.getElementById('focus-section-title');
+
+  overlay.classList.add('active');
+  title.textContent = section.title || 'Untitled Section';
+  editor.value = content;
+
+  // Focus editor
+  setTimeout(() => editor.focus(), 100);
+
+  // Start timer
+  updateFocusTimer();
+  focusModeTimer = setInterval(updateFocusTimer, 1000);
+
+  // Update word count
+  updateFocusWordCount();
+  editor.addEventListener('input', updateFocusWordCount);
+
+  // Hide body scrollbar
+  document.body.style.overflow = 'hidden';
+
+  showToast('🎯 Focus Mode • Press ESC to exit');
 }
 
-// ─── Keyboard Shortcuts ───────────────────────────────────────────────────────
-function setupKeyboardShortcuts() {
+function exitFocusMode() {
+  if (!focusModeActive) return;
+
+  // Save content back to notes
+  const editor = document.getElementById('focus-editor');
+  const content = editor.value;
+
+  if (focusModeSectionId) {
+    if (!state.notes[focusModeSectionId]) {
+      state.notes[focusModeSectionId] = { content: '', citations: [] };
+    }
+    state.notes[focusModeSectionId].content = content;
+    
+    // Update word count in progress
+    const words = content.trim().split(/\s+/).filter(Boolean).length;
+    state.progress[focusModeSectionId] = words;
+    
+    scheduleSave();
+    if (typeof renderProgress === 'function') renderProgress();
+    if (typeof renderNotesBody === 'function') renderNotesBody();
+  }
+
+  // Hide overlay
+  const overlay = document.getElementById('focus-mode');
+  overlay.classList.remove('active');
+
+  // Cleanup
+  clearInterval(focusModeTimer);
+  focusModeTimer = null;
+  focusModeActive = false;
+  focusModeSectionId = null;
+  focusModeStartTime = null;
+
+  // Restore scrollbar
+  document.body.style.overflow = '';
+
+  showToast('✓ Focus Mode ended');
+}
+
+function updateFocusWordCount() {
+  const editor = document.getElementById('focus-editor');
+  const words = editor.value.trim().split(/\s+/).filter(Boolean).length;
+  document.getElementById('focus-word-count').textContent = words + ' words';
+}
+
+function updateFocusTimer() {
+  if (!focusModeStartTime) return;
+  
+  const elapsed = Math.floor((Date.now() - focusModeStartTime) / 1000);
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = elapsed % 60;
+  
+  const display = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  document.getElementById('focus-timer').textContent = display + ' ⏱';
+}
+
+function setupFocusModeShortcuts() {
   document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    // F11 or Ctrl+Shift+F to toggle focus mode
+    if (e.key === 'F11' || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f')) {
       e.preventDefault();
-      scheduleSave();
-      showToast('💾 Saved');
+      
+      if (focusModeActive) {
+        exitFocusMode();
+      } else {
+        // Enter focus mode with currently selected section
+        const sectionId = activeNotesSection || (state.outline[0]?.id);
+        if (sectionId) {
+          enterFocusMode(sectionId);
+        } else {
+          showToast('⚠️ Create a section first');
+        }
+      }
     }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+
+    // ESC to exit focus mode
+    if (e.key === 'Escape' && focusModeActive) {
       e.preventDefault();
-      if (typeof newAssignment === 'function') newAssignment();
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
-      e.preventDefault();
-      document.getElementById('export-btn')?.click();
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-      e.preventDefault();
-      document.querySelector('[data-view="preview"]')?.click();
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-      e.preventDefault();
-      document.querySelector('[data-view="checklist"]')?.click();
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-      e.preventDefault();
-      undo();
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
-      e.preventDefault();
-      redo();
-    }
-    if (e.key === 'Escape') {
-      document.querySelectorAll('.modal-overlay, [style*="position:fixed"][style*="z-index:99"]')
-        .forEach(m => m.remove());
+      exitFocusMode();
     }
   });
 }
 
-// ─── Statistics Dashboard ─────────────────────────────────────────────────────
-function showStatistics() {
-  const totalSections = state.outline.length;
-  const totalTarget = state.assignment.totalWords || 0;
-  const totalWritten = Object.values(state.progress || {}).reduce((a, b) => a + b, 0);
-  const completion = totalTarget > 0 ? Math.round((totalWritten / totalTarget) * 100) : 0;
-  const notesCount = Object.keys(state.notes || {}).length;
-  const refsCount = Object.values(state.notes || {}).reduce((a, n) => a + (n.citations?.length || 0), 0);
+//VERSION HISTORY
+
+// Initialize versions array if not exists
+if (!state.versions) state.versions = [];
+if (!state.versionSettings) {
+  state.versionSettings = {
+    autoSaveEnabled: true,
+    autoSaveInterval: 'daily',
+    maxVersions: 50,
+    lastAutoSave: null
+  };
+}
+
+function createSnapshot(label = null) {
+  const snapshot = {
+    id: 'v_' + crypto.randomUUID(),
+    timestamp: Date.now(),
+    label: label || 'Auto-save',
+    snapshot: {
+      assignment: JSON.parse(JSON.stringify(state.assignment)),
+      outline: JSON.parse(JSON.stringify(state.outline)),
+      notes: JSON.parse(JSON.stringify(state.notes)),
+      progress: JSON.parse(JSON.stringify(state.progress))
+    },
+    metadata: {
+      totalWords: Object.values(state.progress || {}).reduce((a, b) => a + b, 0),
+      sections: state.outline.length,
+      references: Object.values(state.notes || {})
+        .reduce((total, n) => total + (n.citations?.length || 0), 0)
+    }
+  };
+
+  state.versions.push(snapshot);
+
+  // Limit to max versions
+  const max = state.versionSettings.maxVersions || 50;
+  if (state.versions.length > max) {
+    state.versions = state.versions.slice(-max);
+  }
+
+  scheduleSave();
+  showToast(`📸 Snapshot saved: ${label || 'Auto-save'}`);
   
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
-  
-  overlay.innerHTML = `
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:30px;max-width:500px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.4)">
+  return snapshot;
+}
+
+function checkAutoSave() {
+  if (!state.versionSettings.autoSaveEnabled) return;
+
+  const now = Date.now();
+  const last = state.versionSettings.lastAutoSave || 0;
+  const interval = state.versionSettings.autoSaveInterval;
+
+  let shouldSave = false;
+
+  if (interval === 'daily') {
+    const dayInMs = 24 * 60 * 60 * 1000;
+    shouldSave = (now - last) >= dayInMs;
+  } else if (interval === 'hourly') {
+    const hourInMs = 60 * 60 * 1000;
+    shouldSave = (now - last) >= hourInMs;
+  }
+
+  if (shouldSave) {
+    createSnapshot('Auto-save');
+    state.versionSettings.lastAutoSave = now;
+    scheduleSave();
+  }
+}
+
+function showVersionHistory() {
+  if (!state.versions.length) {
+    showToast('📜 No saved versions yet. Create a snapshot to start!');
+    return;
+  }
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+
+  const versions = [...state.versions].sort((a, b) => b.timestamp - a.timestamp);
+
+  modal.innerHTML = `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:30px;max-width:900px;width:90%;max-height:80vh;box-shadow:0 8px 32px rgba(0,0,0,0.4);display:flex;flex-direction:column">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-        <h2 style="margin:0;color:var(--text);font-size:1.3rem">📊 Statistics</h2>
-        <button id="stats-close-btn" style="background:transparent;border:none;color:var(--muted);font-size:1.5rem;cursor:pointer;padding:0;width:30px;height:30px">✕</button>
+        <h2 style="margin:0;color:var(--text);font-size:1.3rem">📜 Version History</h2>
+        <button id="vh-close" style="background:transparent;border:none;color:var(--muted);font-size:1.5rem;cursor:pointer;padding:0;width:30px;height:30px">✕</button>
       </div>
-      <div style="display:grid;gap:12px">
-        <div style="display:flex;justify-content:space-between;padding:12px;background:var(--bg);border-radius:6px">
-          <span style="color:var(--muted)">Sections Created</span>
-          <strong style="color:var(--text)">${totalSections}</strong>
+      
+      <div style="display:grid;grid-template-columns:300px 1fr;gap:20px;flex:1;overflow:hidden">
+        <div style="overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:12px;background:var(--bg)">
+          <div id="vh-list"></div>
         </div>
-        <div style="display:flex;justify-content:space-between;padding:12px;background:var(--bg);border-radius:6px">
-          <span style="color:var(--muted)">Words Written</span>
-          <strong style="color:var(--text)">${totalWritten.toLocaleString()} / ${totalTarget.toLocaleString()}</strong>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:12px;background:var(--bg);border-radius:6px">
-          <span style="color:var(--muted)">Completion</span>
-          <strong style="color:var(--accent)">${completion}%</strong>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:12px;background:var(--bg);border-radius:6px">
-          <span style="color:var(--muted)">Notes Sections</span>
-          <strong style="color:var(--text)">${notesCount}</strong>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:12px;background:var(--bg);border-radius:6px">
-          <span style="color:var(--muted)">References</span>
-          <strong style="color:var(--text)">${refsCount}</strong>
+        
+        <div style="overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:20px;background:var(--bg)">
+          <div id="vh-preview" style="color:var(--muted);text-align:center;padding:40px">
+            ← Select a version to preview
+          </div>
         </div>
       </div>
-      <button id="stats-close-btn-2" style="width:100%;margin-top:20px;background:var(--accent);border:none;color:#fff;padding:10px;border-radius:var(--radius);cursor:pointer;font:inherit;font-size:0.9rem;font-weight:600">Close</button>
+      
+      <div style="display:flex;gap:10px;margin-top:20px;justify-content:space-between">
+        <button id="vh-create" style="background:var(--accent);border:none;color:#fff;padding:10px 20px;border-radius:var(--radius);cursor:pointer;font:inherit;font-size:0.9rem;font-weight:600">+ Save Snapshot</button>
+        <button id="vh-done" style="background:transparent;border:1px solid var(--border);color:var(--text);padding:10px 20px;border-radius:var(--radius);cursor:pointer;font:inherit;font-size:0.9rem">Done</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const listEl = modal.querySelector('#vh-list');
+  versions.forEach(v => {
+    const date = new Date(v.timestamp);
+    const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    
+    const item = document.createElement('div');
+    item.style.cssText = 'padding:12px;margin-bottom:8px;border-radius:6px;cursor:pointer;border:1px solid var(--border);transition:all 0.2s';
+    item.innerHTML = `
+      <div style="font-size:0.75rem;color:var(--muted);margin-bottom:4px">${dateStr}</div>
+      <div style="font-weight:600;color:var(--text);margin-bottom:4px">${escHtml(v.label)}</div>
+      <div style="font-size:0.75rem;color:var(--muted)">${v.metadata.totalWords.toLocaleString()} words • ${v.metadata.sections} sections</div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="vh-restore-btn" data-version-id="${v.id}" style="background:var(--accent);border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem">Restore</button>
+        <button class="vh-delete-btn" data-version-id="${v.id}" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:0.75rem">Delete</button>
+      </div>
+    `;
+    
+    item.addEventListener('click', (e) => {
+      if (e.target.classList.contains('vh-restore-btn') || e.target.classList.contains('vh-delete-btn')) {
+        return;
+      }
+      previewVersion(v);
+    });
+    
+    listEl.appendChild(item);
+  });
+
+  modal.querySelector('#vh-close').addEventListener('click', () => modal.remove());
+  modal.querySelector('#vh-done').addEventListener('click', () => modal.remove());
+  
+  modal.querySelector('#vh-create').addEventListener('click', () => {
+    const label = prompt('Snapshot name:', 'Draft ' + (versions.length + 1));
+    if (label) {
+      createSnapshot(label);
+      modal.remove();
+      showVersionHistory();
+    }
+  });
+
+  modal.querySelectorAll('.vh-restore-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const versionId = btn.dataset.versionId;
+      if (await appConfirm('Restore this version? Current work will be saved as a snapshot first.')) {
+        restoreVersion(versionId);
+        modal.remove();
+      }
+    });
+  });
+
+  modal.querySelectorAll('.vh-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const versionId = btn.dataset.versionId;
+      if (await appConfirm('Delete this version? This cannot be undone.')) {
+        deleteVersion(versionId);
+        modal.remove();
+        showVersionHistory();
+      }
+    });
+  });
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+}
+
+function previewVersion(version) {
+  const previewEl = document.getElementById('vh-preview');
+  const snap = version.snapshot;
+  
+  let html = `
+    <div style="text-align:left">
+      <h3 style="margin:0 0 16px;color:var(--text)">${escHtml(version.label)}</h3>
+      <div style="font-size:0.85rem;color:var(--muted);margin-bottom:20px">
+        ${new Date(version.timestamp).toLocaleString()}
+      </div>
+      
+      <h4 style="margin:16px 0 8px;color:var(--text);font-size:1rem">Brief</h4>
+      <p style="color:var(--muted);font-size:0.85rem;line-height:1.6">
+        ${escHtml(snap.assignment.brief?.substring(0, 200) || 'No brief')}${snap.assignment.brief?.length > 200 ? '...' : ''}
+      </p>
+      
+      <h4 style="margin:16px 0 8px;color:var(--text);font-size:1rem">Outline (${snap.outline.length} sections)</h4>
+      <ul style="margin:0;padding-left:20px;color:var(--muted);font-size:0.85rem">
+        ${snap.outline.slice(0, 10).map(s => `<li>${escHtml(s.title || 'Untitled')} (${s.words} words)</li>`).join('')}
+        ${snap.outline.length > 10 ? `<li style="color:var(--muted)">...and ${snap.outline.length - 10} more</li>` : ''}
+      </ul>
+      
+      <h4 style="margin:16px 0 8px;color:var(--text);font-size:1rem">Statistics</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.85rem">
+        <div style="padding:8px;background:var(--surface2);border-radius:4px">
+          <div style="color:var(--muted);font-size:0.75rem">Total Words</div>
+          <div style="color:var(--text);font-weight:600">${version.metadata.totalWords.toLocaleString()}</div>
+        </div>
+        <div style="padding:8px;background:var(--surface2);border-radius:4px">
+          <div style="color:var(--muted);font-size:0.75rem">Sections</div>
+          <div style="color:var(--text);font-weight:600">${version.metadata.sections}</div>
+        </div>
+        <div style="padding:8px;background:var(--surface2);border-radius:4px">
+          <div style="color:var(--muted);font-size:0.75rem">References</div>
+          <div style="color:var(--text);font-weight:600">${version.metadata.references}</div>
+        </div>
+      </div>
     </div>
   `;
   
-  document.body.appendChild(overlay);
-  
-  // Add event listeners AFTER adding to DOM (this is the fix!)
-  const closeBtn = document.getElementById('stats-close-btn');
-  const closeBtn2 = document.getElementById('stats-close-btn-2');
-  
-  closeBtn.addEventListener('click', () => overlay.remove());
-  closeBtn2.addEventListener('click', () => overlay.remove());
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) overlay.remove();
-  });
+  previewEl.innerHTML = html;
+}
+
+function restoreVersion(versionId) {
+  const version = state.versions.find(v => v.id === versionId);
+  if (!version) {
+    showToast('⚠️ Version not found');
+    return;
+  }
+
+  createSnapshot('Before restoring ' + version.label);
+
+  state.assignment = JSON.parse(JSON.stringify(version.snapshot.assignment));
+  state.outline = JSON.parse(JSON.stringify(version.snapshot.outline));
+  state.notes = JSON.parse(JSON.stringify(version.snapshot.notes));
+  state.progress = JSON.parse(JSON.stringify(version.snapshot.progress));
+
+  renderAll();
+  scheduleSave();
+
+  showToast(`✓ Restored: ${version.label}`);
+}
+
+function deleteVersion(versionId) {
+  const index = state.versions.findIndex(v => v.id === versionId);
+  if (index === -1) {
+    showToast('⚠️ Version not found');
+    return;
+  }
+
+  const label = state.versions[index].label;
+  state.versions.splice(index, 1);
+  scheduleSave();
+
+  showToast(`✓ Deleted: ${label}`);
+}
+
+function renderAll() {
+  if (typeof renderOutline === 'function') renderOutline();
+  if (typeof renderNotesSidebar === 'function') renderNotesSidebar();
+  if (typeof renderNotesBody === 'function') renderNotesBody();
+  if (typeof renderProgress === 'function') renderProgress();
+  if (typeof renderChecklist === 'function') renderChecklist();
+  if (typeof renderPreview === 'function') renderPreview();
+  if (typeof renderAllRefsList === 'function') renderAllRefsList();
 }
 
 
@@ -328,6 +588,19 @@ async function init() {
   if (saved) Object.assign(state, saved);
   bindUI();
   renderAll();
+
+  
+  // ═══ Feature Initialization ═══
+  setupFocusModeShortcuts();
+  
+  // Auto-save check every minute
+  setInterval(checkAutoSave, 60000);
+  
+  // Create first snapshot if none exist
+  if (!state.versions || !state.versions.length) {
+    createSnapshot('Initial version');
+  }
+
 }
 
 // ─── Save ─────────────────────────────────────────────────────────────────────
@@ -352,7 +625,7 @@ document.querySelectorAll('.nav-item').forEach(btn => {
     if (btn.dataset.view === 'progress')  renderProgress();
     if (btn.dataset.view === 'checklist') renderChecklist();
     if (btn.dataset.view === 'preview')   renderPreview();
-    if (btn.dataset.view === 'refs')      renderRefs();
+    if (btn.dataset.view === 'refs') {renderRefs();renderAllRefsList();renderCitationStats();}
     if (btn.dataset.view === 'checker') initChecker();
     if (btn.dataset.view === 'draft')   initDraftView();
   });
@@ -441,6 +714,34 @@ function applyStateSnapshot(saved) {
   // Preview refresh
   const refreshBtn = document.getElementById('refresh-preview-btn');
   if (refreshBtn) refreshBtn.addEventListener('click', renderPreview);
+  function exportNotesAsHTML() {
+  const html = [];
+  
+  state.outline.forEach(section => {
+    const note = state.notes[section.id];
+    if (note && note.content) {
+      html.push(`<h2>${escHtml(section.title)}</h2>`);
+      html.push(note.content); // Already formatted HTML
+    }
+  });
+  
+  return html.join('\n');
+}
+
+function exportNotesAsText() {
+  const text = [];
+  
+  state.outline.forEach(section => {
+    const editor = notesEditorInstances[section.id];
+    if (editor) {
+      text.push(`## ${section.title}\n`);
+      text.push(editor.getText()); // Plain text version
+      text.push('\n');
+    }
+  });
+  
+  return text.join('\n');
+}
 
   // Export PDF  ← NEW
   const exportBtn = document.getElementById('export-pdf-btn');
@@ -479,9 +780,6 @@ function applyStateSnapshot(saved) {
   document.getElementById('draft-stop-btn')?.addEventListener('click', () => { if (window._draftStop) window._draftStop(); });
   // New assignment
   document.getElementById('new-btn').addEventListener('click', newAssignment);
-  document.getElementById('stats-btn')?.addEventListener('click', showStatistics);
-  document.getElementById('undo-btn')?.addEventListener('click', undo);
-  document.getElementById('redo-btn')?.addEventListener('click', redo);
 }
 
 // ─── Deadline pill ────────────────────────────────────────────────────────────
@@ -755,83 +1053,116 @@ function renderNotesSidebar() {
   });
 }
 
+// Store editor instances
+let notesEditorInstances = {};
+
 function renderNotesBody() {
   const body = document.getElementById('notes-body');
-  if (!body) return;
-
+  
   if (!activeNotesSection) {
-    body.innerHTML = '<div class="placeholder-msg">Select a section from the left.</div>';
+    body.innerHTML = '<div class="notes-empty">← Select a section to add notes</div>';
     return;
   }
-
-  if (!state.notes[activeNotesSection]) {
-    state.notes[activeNotesSection] = { content: '', citations: [] };
+  
+  // Don't re-render if same section
+  if (lastRenderedNotesSection === activeNotesSection && notesEditorInstances[activeNotesSection]) {
+    return;
   }
-
-  const note    = state.notes[activeNotesSection];
+  
+  lastRenderedNotesSection = activeNotesSection;
+  
   const section = state.outline.find(s => s.id === activeNotesSection);
-  const noteWordCount = note.content.trim() === ''
-    ? 0
-    : note.content.trim().split(/\s+/).length;
-
-  body.innerHTML = `
-    <div class="notes-editor-wrap">
-      <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <label class="field-label" style="margin-bottom:0;">${escHtml(section?.title || 'Notes')}</label>
-          <button class="btn-ghost" style="font-size:11px;padding:4px 10px;" id="count-notes-btn"
-            title="Push note word count to Progress">
-            📊 Count notes (${noteWordCount} words) → Progress
-          </button>
-        </div>
-        <textarea class="notes-textarea" id="notes-ta"
-          placeholder="Type your research notes, key points, ideas…"
-          style="min-height:180px;">${escHtml(note.content)}</textarea>
-      </div>
-      <div class="citations-section">
-        <h4>📚 References for this section</h4>
-        <div class="add-citation-form" id="cite-form">
-          <input id="cite-author" placeholder="Author(s) e.g. Smith, J." />
-          <input id="cite-year"   placeholder="Year e.g. 2023" />
-          <input id="cite-title"  placeholder="Title of work"      style="grid-column:1/-1;" />
-          <input id="cite-pub"    placeholder="Publisher / Journal" style="grid-column:1/-1;" />
-          <button class="btn-primary small" id="add-cite-btn">＋ Add Citation</button>
-        </div>
-        <div id="cite-list"></div>
-      </div>
+  if (!section) return;
+  
+  const note = state.notes[activeNotesSection] || { content: '', citations: [] };
+  
+  // Destroy previous editor if exists
+  if (notesEditorInstances[activeNotesSection]) {
+    notesEditorInstances[activeNotesSection].destroy();
+  }
+  
+body.innerHTML = `
+  <div class="notes-header">
+    <h3>${escHtml(section.title || 'Untitled Section')}</h3>
+    <div class="notes-ai-bar">
+      <span class="notes-ai-label">🤖 AI Model</span>
+      <select id="notes-model-select" class="notes-model-select">
+        <option value="">Loading…</option>
+      </select>
+      <span id="notes-model-status" class="notes-model-status"></span>
     </div>
-  `;
+  </div>
+  <div class="editor-wrapper">
+    <div id="notes-editor-${activeNotesSection}" class="editor-container"></div>
+  </div>
+  <div class="notes-footer">
+    <button class="btn-ghost small" id="push-wc-btn">Push Word Count to Progress</button>
+  </div>
+`;
+  
+  // Initialize rich editor
+  const editorElement = document.getElementById(`notes-editor-${activeNotesSection}`);
 
-  // Notes textarea
-  const ta = document.getElementById('notes-ta');
-  ta.addEventListener('input', () => {
-    state.notes[activeNotesSection].content = ta.value;
-    scheduleSave();
-    // Update the count button label live
-    const wc = ta.value.trim() === '' ? 0 : ta.value.trim().split(/\s+/).length;
-    const cb = document.getElementById('count-notes-btn');
-    if (cb) cb.textContent = `📊 Count notes (${wc} words) → Progress`;
+  // Populate AI model dropdown
+(async () => {
+  const sel = document.getElementById('notes-model-select');
+  const status = document.getElementById('notes-model-status');
+  if (!sel) return;
+  try {
+    const res = await window.api.ollamaFetch('/api/tags', null);
+    if (res.ok) {
+      const models = JSON.parse(res.text).models?.map(m => m.name) || [];
+      if (models.length) {
+        sel.innerHTML = models.map(m =>
+          `<option value="${m}" ${m === (window._lastGrammarModel || '') ? 'selected' : ''}>${m}</option>`
+        ).join('');
+        // Set global to currently selected
+        window._lastGrammarModel = sel.value;
+        if (status) status.textContent = `${models.length} model${models.length > 1 ? 's' : ''} available`;
+      } else {
+        sel.innerHTML = '<option value="">No models found</option>';
+        if (status) status.textContent = 'Pull a model first';
+      }
+    }
+  } catch {
+    sel.innerHTML = '<option value="">Ollama offline</option>';
+    if (status) status.textContent = '⚠ Ollama not running';
+  }
+  sel.addEventListener('change', () => {
+    window._lastGrammarModel = sel.value;
   });
-// Highlight first search match in textarea
-if (notesSearchQuery && ta.value) {
-  const idx = ta.value.toLowerCase().indexOf(notesSearchQuery.toLowerCase());
-  if (idx !== -1) setTimeout(() => ta.setSelectionRange(idx, idx + notesSearchQuery.length), 50);
-}
-  // Count notes → Progress
-  document.getElementById('count-notes-btn').addEventListener('click', () => {
-    const wc = ta.value.trim() === '' ? 0 : ta.value.trim().split(/\s+/).length;
-    if (wc === 0) return;
-    state.progress[activeNotesSection] = wc;
-    scheduleSave();
-    const btn = document.getElementById('count-notes-btn');
-    const orig = btn.textContent;
-    btn.textContent = '✓ Saved to Progress!';
-    btn.style.color = 'var(--green)';
-    setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 2000);
+})();
+  
+  // Check if RichEditor is available
+  if (typeof window.RichEditor === 'undefined') {
+    editorElement.innerHTML = '<p style="color: red; padding: 20px;">Error: RichEditor not loaded. Make sure TipTap and richEditor.js are included in index.html</p>';
+    return;
+  }
+  
+  notesEditorInstances[activeNotesSection] = new window.RichEditor(editorElement, {
+    content: note.content || '',
+    placeholder: 'Start writing your notes...',
+    onUpdate: (html, text) => {
+      // Save to state
+      if (!state.notes[activeNotesSection]) {
+        state.notes[activeNotesSection] = { content: '', citations: [] };
+      }
+      state.notes[activeNotesSection].content = html;
+      scheduleSave();
+    }
   });
-
-  document.getElementById('add-cite-btn').addEventListener('click', addCitation);
-  renderCitations();
+  
+  // Push word count button
+  document.getElementById('push-wc-btn').addEventListener('click', () => {
+    const editor = notesEditorInstances[activeNotesSection];
+    if (editor) {
+      const words = editor.editor.storage.characterCount.words();
+      state.progress[activeNotesSection] = words;
+      renderProgress();
+      showToast(`✓ Pushed ${words} words to Progress`);
+      scheduleSave();
+    }
+  });
 }
 
 // ─── Citations ────────────────────────────────────────────────────────────────
@@ -923,6 +1254,9 @@ function updateProgressStats(written, target) {
   document.getElementById('stat-pct').textContent     = pct + '%';
   document.getElementById('stat-written').textContent = written.toLocaleString();
   document.getElementById('stat-left').textContent    = left.toLocaleString();
+  document.getElementById('version-btn')?.addEventListener('click', showVersionHistory);
+
+
 
   const deadline = state.assignment.deadline;
   const daysEl   = document.getElementById('stat-days');
@@ -1021,10 +1355,9 @@ function renderPreview() {
     const target    = section.words || 0;
     const secPct    = target > 0 ? Math.min(100, Math.round(written / target * 100)) : 0;
 
-    const notesHtml = note.content.trim()
-      ? `<div class="preview-notes-text">${escHtml(note.content)}</div>`
-      : `<div class="preview-empty">No notes yet for this section.</div>`;
-
+const notesHtml = note.content.trim()
+    ? `<div class="preview-notes-text">${note.content}</div>`
+    : `<div class="preview-empty">No notes yet for this section.</div>`;
     const citeHtml = note.citations?.length
       ? `<div class="preview-citations">
           <h5>References</h5>
@@ -1522,10 +1855,16 @@ const STYLE_FORMATTERS = {
 function renderRefs() {
   document.querySelectorAll('.refs-style-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.style === refsStyle);
-    btn.onclick = () => { refsStyle = btn.dataset.style; renderRefs(); };
+    btn.onclick = () => { 
+  console.log('Switching to style:', btn.dataset.style);
+  refsStyle = btn.dataset.style; 
+  document.querySelectorAll('.refs-style-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderRefsFields(); 
+  renderAllRefsList(); 
+  renderCitationStats(); 
+};
   });
-  renderRefsFields();
-  renderAllRefsList();
   const copyAllBtn = document.getElementById('refs-copy-all-btn');
   if (copyAllBtn) {
     copyAllBtn.onclick = () => {
@@ -1538,20 +1877,63 @@ function renderRefs() {
   }
 }
 
-function renderRefsFields() {
+function renderRefs() {
+  // Update style button states
+  document.querySelectorAll('.refs-style-btn').forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.dataset.style === refsStyle) {
+      btn.classList.add('active');
+    }
+    
+    // Attach click handler
+    btn.onclick = (e) => {
+      e.preventDefault();
+      console.log('Style button clicked:', btn.dataset.style);
+      
+      // Update active state
+      document.querySelectorAll('.refs-style-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      // Update style
+      refsStyle = btn.dataset.style;
+      
+      // Re-render everything
+      updateRefsOutput(); // This updates the reference formatter
+      renderAllRefsList(); // This updates the reference list
+      renderCitationStats(); // This updates citation stats
+    };
+  });
+  
+  // Initial render of fields and output
   const typeSelect = document.getElementById('refs-source-type');
-  const fieldsDiv  = document.getElementById('refs-fields');
-  if (!typeSelect || !fieldsDiv) return;
-  const type   = typeSelect.value;
-  const fields = REFS_FIELDS[type] || [];
-  fieldsDiv.innerHTML = fields.map(f =>
-    `<input id="${f.id}" placeholder="${f.label}" class="${f.full ? 'full' : ''}" />`
-  ).join('');
-  fieldsDiv.querySelectorAll('input').forEach(inp => inp.addEventListener('input', updateRefsOutput));
-  typeSelect.onchange = () => { renderRefsFields(); updateRefsOutput(); };
-  updateRefsOutput();
+  if (typeSelect) {
+    typeSelect.onchange = () => { 
+      const fieldsDiv = document.getElementById('refs-fields');
+      const type = typeSelect.value;
+      const fields = REFS_FIELDS[type] || [];
+      fieldsDiv.innerHTML = fields.map(f =>
+        `<input id="${f.id}" placeholder="${f.label}" class="${f.full ? 'full' : ''}" />`
+      ).join('');
+      fieldsDiv.querySelectorAll('input').forEach(inp => inp.addEventListener('input', updateRefsOutput));
+      updateRefsOutput();
+    };
+    typeSelect.onchange(); // Trigger initial render
+  }
+  
+  renderAllRefsList();
+  renderCitationStats();
   bindRefsCopyBtns();
 }
+  const copyAllBtn = document.getElementById('refs-copy-all-btn');
+  if (copyAllBtn) {
+    copyAllBtn.onclick = () => {
+      const items = document.querySelectorAll('#refs-all-list .refs-all-item');
+      const text  = Array.from(items).map(el => el.innerText).join('\n');
+      navigator.clipboard.writeText(text);
+      copyAllBtn.textContent = '✓ Copied!';
+      setTimeout(() => copyAllBtn.textContent = '📋 Copy All as Reference List', 2000);
+    };
+  }
 
 function updateRefsOutput() {
   const typeSelect = document.getElementById('refs-source-type');
@@ -1600,33 +1982,143 @@ function bindRefsCopyBtns() {
 function renderAllRefsList() {
   const container = document.getElementById('refs-all-list');
   if (!container) return;
-  const formatter = STYLE_FORMATTERS[refsStyle];
-  let html = '';
-  let hasAny = false;
-  state.outline.forEach(section => {
-    const note = state.notes[section.id];
-    if (!note?.citations?.length) return;
-    hasAny = true;
-    html += `<div class="refs-all-section-label">${escHtml(section.title)}</div>`;
-    const sorted = [...note.citations].sort((a, b) =>
-      getSurname(a.author).toUpperCase().localeCompare(getSurname(b.author).toUpperCase())
-    );
-    sorted.forEach(c => {
-      const vals = {
-        'r-author': c.author, 'r-year': c.year, 'r-title': c.title,
-        'r-atitle': c.title,  'r-publisher': c.pub, 'r-journal': c.pub,
-        'r-place': '', 'r-volume': '', 'r-issue': '', 'r-pages': '',
-        'r-url': '', 'r-viewed': '', 'r-site': '', 'r-doi': '',
-        'r-edition': '', 'r-editor': ''
-      };
-      const type      = c.pub ? 'book' : 'website';
-      const formatted = formatter.format(type, vals);
-      html += `<div class="refs-all-item">${formatted || `${escHtml(c.author)} (${escHtml(c.year)}). <em>${escHtml(c.title)}</em>. ${escHtml(c.pub)}.`}</div>`;
+  
+  const analysis = analyzeCitations();
+  const allRefs = getAllReferences();
+  
+  if (!allRefs.length) {
+    container.innerHTML = '<div class="refs-empty">No references added yet.</div>';
+    return;
+  }
+  
+  const currentStyle = document.querySelector('.refs-style-btn.active')?.dataset.style || 'solent';
+  
+  container.innerHTML = allRefs.map(ref => {
+    const citationData = analysis.cited.get(ref.id);
+    const isCited = !!citationData;
+    const citCount = citationData ? citationData.count : 0;
+    
+    // Badge
+    const badge = isCited
+      ? `<span class="ref-citation-badge cited" title="Cited ${citCount} time${citCount !== 1 ? 's' : ''}">
+           ✓ Cited ${citCount}×
+         </span>`
+      : `<span class="ref-citation-badge uncited" title="Not cited yet">
+           Not cited
+         </span>`;
+    
+    // Formatted reference
+    const formatted = formatRef(ref, currentStyle);
+    
+    // Location links
+    const locations = citationData ? citationData.locations.map((loc, i) => 
+      `<button class="ref-location-link" data-section="${loc.sectionId}" title="${escHtml(loc.context)}">
+         ${escHtml(loc.sectionTitle)}
+       </button>`
+    ).join('') : '';
+    
+    return `
+      <div class="ref-item ${isCited ? 'cited' : 'uncited'}" data-ref-id="${ref.id}">
+        <div class="ref-header">
+          ${badge}
+          <button class="ref-insert-btn" data-ref-id="${ref.id}" title="Insert citation">
+            📎 Insert
+          </button>
+        </div>
+        <div class="ref-text">${formatted}</div>
+        ${locations ? `<div class="ref-locations">${locations}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+  
+  // Attach event listeners
+  container.querySelectorAll('.ref-location-link').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sectionId = btn.dataset.section;
+      switchToSection(sectionId);
     });
   });
-  if (!hasAny) html = '<div class="refs-all-empty">No references added yet. Add them in the Notes tab per section.</div>';
-  container.innerHTML = html;
+  
+  container.querySelectorAll('.ref-insert-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const refId = btn.dataset.refId;
+      insertCitation(refId);
+    });
+  });
 }
+function renderCitationStats() {
+  const analysis = analyzeCitations();
+  const { stats, missing } = analysis;
+  
+  const statsHtml = `
+    <div class="citation-stats-panel">
+      <h4>📊 Citation Analysis</h4>
+      <div class="citation-stats-grid">
+        <div class="stat-item">
+          <div class="stat-value">${stats.total}</div>
+          <div class="stat-label">Total Citations</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">${stats.unique}</div>
+          <div class="stat-label">Unique Sources</div>
+        </div>
+        <div class="stat-item ${stats.unused > 0 ? 'warning' : ''}">
+          <div class="stat-value">${stats.unused}</div>
+          <div class="stat-label">Unused Refs</div>
+        </div>
+        <div class="stat-item ${missing.length > 0 ? 'error' : ''}">
+          <div class="stat-value">${missing.length}</div>
+          <div class="stat-label">Missing Refs</div>
+        </div>
+      </div>
+      
+      ${missing.length > 0 ? `
+        <div class="missing-refs-warning">
+          <strong>⚠️ Missing References:</strong>
+          <ul>
+            ${missing.map(m => 
+              `<li><strong>${escHtml(m.citation.author)} (${m.citation.year})</strong> in ${escHtml(m.sectionTitle)}</li>`
+            ).join('')}
+          </ul>
+          <p class="hint">Add these to your reference list to complete your bibliography.</p>
+        </div>
+      ` : ''}
+      
+      ${stats.total > 0 ? `
+        <div class="citation-actions">
+          <button class="btn-primary small" id="generate-bibliography-btn">
+            📋 Copy Bibliography (Cited Only)
+          </button>
+          <button class="btn-ghost small" id="generate-all-bibliography-btn">
+            📚 Copy All References
+          </button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+  
+  // Insert before reference list
+  const container = document.getElementById('refs-all-list');
+  if (container) {
+    const existing = container.previousElementSibling;
+    if (existing?.classList.contains('citation-stats-panel')) {
+      existing.remove();
+    }
+    container.insertAdjacentHTML('beforebegin', statsHtml);
+    
+    // Attach event listeners to bibliography buttons
+    const genBtn = document.getElementById('generate-bibliography-btn');
+    if (genBtn) {
+      genBtn.addEventListener('click', () => generateBibliography(true));
+    }
+    
+    const genAllBtn = document.getElementById('generate-all-bibliography-btn');
+    if (genAllBtn) {
+      genAllBtn.addEventListener('click', () => generateBibliography(false));
+    }
+  }
+}
+
 // ─── Writing Checker ──────────────────────────────────────────────────────────
 const AI_PHRASES = [
   'it is important to note','it is worth noting','it should be noted',
@@ -1972,7 +2464,7 @@ const AI_ANALYSIS_CONFIG = {
 };
 
 // ───────────────────────────────────────────────────────────────────────────────
-// Enhanced AI Brief Analyser (REPLACES old analyseBriefWithAI)
+// Enhanced AI Brief Analyser 
 // ───────────────────────────────────────────────────────────────────────────────
 
 async function analyseBriefWithAI() {
@@ -2819,13 +3311,13 @@ function applyThesisToNotes(content) {
 async function aiCheckDraft() {
   const text = document.getElementById('checker-textarea').value.trim();
   if (!text) {
-    showToast('⚠️ Paste your draft text first.');
+    showToast('Paste your draft text first.');
     return;
   }
 
-  // Show model selection popup
+  // ✨ NEW: Show model selection popup
   const model = await showModelSelectionPopup('Select Model for Draft Checking', selectedAiModel);
-  if (!model) return;
+  if (!model) return; // User cancelled
   
   selectedAiModel = model;
 
@@ -2837,21 +3329,35 @@ async function aiCheckDraft() {
   btn.textContent = '⏳ Checking…';
   btn.disabled = true;
 
+  // Build output elements directly — avoids getElementById stale-reference bug
   const outDiv = document.createElement('div');
   outDiv.style.cssText = 'font-size:0.875rem;line-height:1.9;color:var(--text)';
   outDiv.innerHTML = '<span style="color:var(--muted)">Reading draft…</span>';
 
+  // Fetch models list for the dropdown (showModelSelectionPopup fetches them internally but doesn't expose them)
+  const models = await ollamaGetModels() || [];
+
+  const modelRow = document.createElement('div');
+  modelRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:10px';
+  modelRow.innerHTML = `<span style="font-size:0.75rem;color:var(--muted)">Model:</span>
+    <select id="check-model-sel" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:var(--radius);font:inherit;font-size:0.8rem">
+      ${models.map(n => `<option value="${n}"${n===selectedAiModel?' selected':''}>${n}</option>`).join('')}
+    </select>
+    <button id="check-rerun-btn" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:var(--radius);font:inherit;font-size:0.75rem;cursor:pointer;white-space:nowrap">🔄 Re-run</button>`;
+
   const wrapper = document.createElement('div');
   wrapper.style.cssText = 'background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px';
-  
   const meta = document.createElement('p');
   meta.style.cssText = 'color:var(--muted);font-size:0.75rem;margin:0 0 12px';
-  meta.textContent = `AI Feedback · ${wordCount.toLocaleString()} words · ${model}`;
-  
+  meta.textContent = `AI Feedback · ${wordCount.toLocaleString()} words · ${selectedAiModel}`;
+  wrapper.appendChild(modelRow);
   wrapper.appendChild(meta);
   wrapper.appendChild(outDiv);
   resultsEl.innerHTML = '';
   resultsEl.appendChild(wrapper);
+
+  document.getElementById('check-model-sel')?.addEventListener('change', e => { selectedAiModel = e.target.value; });
+  document.getElementById('check-rerun-btn')?.addEventListener('click', aiCheckDraft);
 
   const prompt = `You are a strict academic checker. Return ONLY direct feedback on the student's draft.
 
@@ -2860,15 +3366,22 @@ Rules:
 - Do NOT write as a teacher, lecturer, or named person.
 - Do NOT add "Dear student" or any salutation.
 - Do NOT include markdown headings beyond the six required sections.
+- Do NOT mention references unless you are pointing out missing citations in the draft.
 - Be factual, concise, and specific.
 
-Use exactly these six headings:
+Use exactly these six headings and nothing else:
 1. Brief Alignment
 2. Academic Tone
 3. Argument & Structure
 4. Cohesion & Flow
 5. Citation Gaps
 6. Overall & Grade Estimate
+
+For each heading:
+- Use 2-5 bullet points.
+- Quote short phrases from the draft when giving examples.
+- If a section is weak, say exactly why.
+- End with a short overall grade band only in the last heading.
 
 BRIEF:
 ${brief || 'Not provided'}
@@ -2878,59 +3391,391 @@ ${text}`;
 
   let full = '';
   outDiv.innerHTML = '';
-  
-  ollamaStream(
-    model,
-    prompt,
-    (chunk) => {
-      full += chunk;
-      outDiv.innerHTML = renderMarkdown(full);
-    },
-    () => {
-      showToast('✅ Check complete!');
-      btn.textContent = '✨ AI Check';
-      btn.disabled = false;
-    },
-    (err) => {
-      outDiv.innerHTML = `<span style="color:var(--rose)">Error: ${escHtml(err)}</span>`;
-      btn.textContent = '✨ AI Check';
-      btn.disabled = false;
-    }
+  ollamaStream(selectedAiModel, prompt,
+    chunk => { full += chunk; outDiv.innerHTML = renderMarkdown(full); },
+    ()    => { showToast('✅ Check complete!'); btn.textContent = '✨ AI Check'; btn.disabled = false; },
+    err   => { outDiv.innerHTML = `<span style="color:var(--rose)">Error: ${escHtml(err)}</span>`; btn.textContent = '✨ AI Check'; btn.disabled = false; }
   );
 }
+// Clean up editors when switching views
+function cleanupEditors() {
+  // Cleanup notes editors
+  Object.values(notesEditorInstances).forEach(editor => {
+    if (editor) editor.destroy();
+  });
+  notesEditorInstances = {};
+  
+  // Cleanup draft editor
+  if (draftEditorInstance) {
+    draftEditorInstance.destroy();
+    draftEditorInstance = null;
+  }
+}
 
+// Call cleanup when needed
+function switchView(viewName) {
+  // Save current editor content before switching
+  saveAllEditorContent();
+  
+  // Your existing view switching code
+  
+  // Cleanup editors
+  cleanupEditors();
+}
 
-// ─── AI Draft Starter ─────────────────────────────────────────────────────────
-async function initDraftView() {
-  if (initDraftView._done) return;
-  const sel = document.getElementById('draft-model-select');
-  if (!sel) return;
-  const models = await ollamaGetModels();
-  if (!models.length) {
-    sel.innerHTML = '<option>⚠️ Ollama not running — click Draft tab again</option>';
-    initDraftView._done = false;
+function saveAllEditorContent() {
+  // Save all notes editors
+  Object.keys(notesEditorInstances).forEach(sectionId => {
+    const editor = notesEditorInstances[sectionId];
+    if (editor) {
+      const html = editor.getHTML();
+      if (!state.notes[sectionId]) {
+        state.notes[sectionId] = { content: '', citations: [] };
+      }
+      state.notes[sectionId].content = html;
+    }
+  });
+}
+
+// ─── Citation Detection & Tracking ────────────────────────────────────────────
+
+// Regex patterns for different citation styles
+const CITATION_PATTERNS = {
+  // Harvard: (Smith, 2020) or (Smith and Jones, 2020)
+  harvard: /\(([A-Z][a-z]+(?:\s+(?:and|&|et al\.?)\s+[A-Z][a-z]+)?),?\s*(\d{4}[a-z]?)\)/g,
+  
+  // APA: Smith (2020) or (Smith, 2020; Jones, 2019)
+  apa: /\(([A-Z][a-z]+(?:\s+(?:and|&|et al\.?)\s+[A-Z][a-z]+)?),?\s*(\d{4}[a-z]?)(?:;\s*[A-Z][a-z]+,?\s*\d{4}[a-z]?)*\)/g,
+  
+  // Author-year in text: Smith (2020) argues that...
+  inText: /([A-Z][a-z]+(?:\s+(?:and|&|et al\.?)\s+[A-Z][a-z]+)?)\s*\((\d{4}[a-z]?)\)/g,
+  
+  // Numbered: [1], [2,3], [1-5]
+  numbered: /\[(\d+(?:[-,]\d+)*)\]/g,
+  
+  // Footnote style: ^1, ^2
+  footnote: /\^(\d+)/g
+};
+
+/**
+ * Extract all citations from text
+ * Returns: [{ author, year, raw, style, position }]
+ */
+function extractCitations(text) {
+  const citations = [];
+  
+  // Check Harvard/APA style
+  let match;
+  while ((match = CITATION_PATTERNS.harvard.exec(text)) !== null) {
+    citations.push({
+      author: match[1].trim(),
+      year: match[2].trim(),
+      raw: match[0],
+      style: 'harvard',
+      position: match.index,
+      fullMatch: match[0]
+    });
+  }
+  
+  // Reset regex
+  CITATION_PATTERNS.harvard.lastIndex = 0;
+  
+  // Check in-text citations
+  while ((match = CITATION_PATTERNS.inText.exec(text)) !== null) {
+    // Avoid duplicates from Harvard pattern
+    const isDuplicate = citations.some(c => 
+      c.position === match.index && c.author === match[1]
+    );
+    if (!isDuplicate) {
+      citations.push({
+        author: match[1].trim(),
+        year: match[2].trim(),
+        raw: match[0],
+        style: 'inText',
+        position: match.index,
+        fullMatch: match[0]
+      });
+    }
+  }
+  
+  CITATION_PATTERNS.inText.lastIndex = 0;
+  
+  return citations;
+}
+
+/**
+ * Match citation to reference in list
+ * Returns: matching reference object or null
+ */
+function matchCitationToReference(citation, allRefs) {
+  const citAuthor = citation.author.toLowerCase().replace(/\s+et al\.?/, '');
+  const citYear = citation.year.replace(/[a-z]$/, ''); // Remove letter suffix
+  
+  return allRefs.find(ref => {
+    const refAuthor = (ref.author || '').toLowerCase();
+    const refYear = (ref.year || '').toString();
+    
+    // Match on author last name and year
+    const authorMatch = refAuthor.includes(citAuthor) || citAuthor.includes(refAuthor.split(',')[0]);
+    const yearMatch = refYear === citYear;
+    
+    return authorMatch && yearMatch;
+  });
+}
+
+/**
+ * Analyze all citations across notes
+ * Returns: {
+ *   cited: Map<refId, {count, locations}>,
+ *   missing: [{citation, sectionId}],
+ *   stats: {total, unique, unused}
+ * }
+ */
+/**
+ * Analyze all citations across notes - SAFE VERSION WITH ERROR HANDLING
+ */
+function analyzeCitations() {
+  const cited = new Map();
+  const missing = [];
+  
+  try {
+    const allRefs = getAllReferences();
+    
+    // Safety check
+    if (!state || !state.outline || !Array.isArray(state.outline)) {
+      console.warn('State not ready for citation analysis');
+      return {
+        cited,
+        missing,
+        stats: { total: 0, unique: 0, unused: 0, unusedRefs: [] }
+      };
+    }
+    
+    state.outline.forEach(section => {
+      const notes = state.notes[section.id];
+      if (!notes || !notes.content) return;
+      
+      const citations = extractCitations(notes.content);
+      
+      citations.forEach(cit => {
+        const matchedRef = matchCitationToReference(cit, allRefs);
+        
+        if (matchedRef) {
+          if (!cited.has(matchedRef.id)) {
+            cited.set(matchedRef.id, {
+              ref: matchedRef,
+              count: 0,
+              locations: []
+            });
+          }
+          
+          const citData = cited.get(matchedRef.id);
+          citData.count++;
+          citData.locations.push({
+            sectionId: section.id,
+            sectionTitle: section.title,
+            context: notes.content.substring(
+              Math.max(0, cit.position - 50),
+              Math.min(notes.content.length, cit.position + 50)
+            )
+          });
+        } else {
+          missing.push({
+            citation: cit,
+            sectionId: section.id,
+            sectionTitle: section.title
+          });
+        }
+      });
+    });
+    
+    const totalCitations = Array.from(cited.values()).reduce((sum, c) => sum + c.count, 0);
+    const uniqueSources = cited.size;
+    const unusedRefs = allRefs.filter(ref => !cited.has(ref.id));
+    
+    return {
+      cited,
+      missing,
+      stats: {
+        total: totalCitations,
+        unique: uniqueSources,
+        unused: unusedRefs.length,
+        unusedRefs
+      }
+    };
+  } catch (error) {
+    console.error('Error in analyzeCitations:', error);
+    return {
+      cited,
+      missing,
+      stats: { total: 0, unique: 0, unused: 0, unusedRefs: [] }
+    };
+  }
+}
+/**
+ * Get all references from notes
+ */
+function getAllReferences() {
+  const allRefs = [];
+  const seen = new Set();
+  
+  state.outline.forEach(section => {
+    const notes = state.notes[section.id];
+    if (!notes || !notes.citations) return;
+    
+    notes.citations.forEach(ref => {
+      // Create unique ID if not present
+      const refId = ref.id || `${ref.author}-${ref.year}`;
+      
+      if (!seen.has(refId)) {
+        seen.add(refId);
+        allRefs.push({ ...ref, id: refId });
+      }
+    });
+  });
+  
+  return allRefs;
+}
+/**
+ * Insert citation at cursor in active editor
+ */
+function insertCitation(refId) {
+  const ref = getAllReferences().find(r => r.id === refId);
+  if (!ref) {
+    showToast('⚠️ Reference not found');
     return;
   }
-  const preferred = ['llama3.2','llama3.2:3b','llama3','mistral','gemma3'];
-  if (!selectedAiModel || !models.includes(selectedAiModel))
-    selectedAiModel = preferred.find(p => models.some(n => n.startsWith(p))) || models[0];
-sel.innerHTML = models.map(n => `<option value="${escHtml(n)}"...>${escHtml(n)}</option>`).join('');
-  sel.addEventListener('change', e => { selectedAiModel = e.target.value; });
-  // Wire toggle
-  const toggle = document.getElementById('draft-full-toggle');
-  const track  = document.getElementById('draft-toggle-track');
-  const thumb  = document.getElementById('draft-toggle-thumb');
-  if (toggle) {
-    const updateToggle = () => {
-      if (track) track.style.background = toggle.checked ? 'var(--accent)' : 'var(--border)';
-      if (thumb) thumb.style.left       = toggle.checked ? '19px' : '3px';
-    };
-    toggle.addEventListener('change', updateToggle);
-    if (track) track.addEventListener('click', () => { toggle.checked = !toggle.checked; toggle.dispatchEvent(new Event('change')); });
-    if (thumb) thumb.addEventListener('click', () => { toggle.checked = !toggle.checked; toggle.dispatchEvent(new Event('change')); });
+  
+  // Check if we're in notes view with an active section
+  let editor = null;
+  if (activeNotesSection && notesEditorInstances[activeNotesSection]) {
+    editor = notesEditorInstances[activeNotesSection];
   }
-  initDraftView._done = true;
+  
+  if (!editor) {
+    showToast('⚠️ Please open a notes section first');
+    return;
+  }
+  
+  // Get citation style
+  const style = document.querySelector('.refs-style-btn.active')?.dataset.style || 'solent';
+  const author = (ref.author || '').split(',')[0].trim();
+  const year = ref.year || '';
+  
+  // Format citation based on style
+  let citationText;
+  switch (style) {
+    case 'harvard':
+    case 'solent':
+    case 'apa':
+      citationText = `(${author}, ${year})`;
+      break;
+    case 'mla':
+      citationText = `(${author})`;
+      break;
+    default:
+      citationText = `(${author}, ${year})`;
+  }
+  
+  // Insert into editor
+  document.execCommand('insertText', false, citationText + ' ');
+  
+  showToast(`✓ Citation inserted: ${citationText}`);
+  
+  // Update citation tracking
+  setTimeout(() => {
+    if (document.querySelector('[data-view="refs"]')?.classList.contains('active')) {
+      renderAllRefsList();
+      renderCitationStats();
+    }
+  }, 100);
 }
+
+/**
+ * Generate bibliography from cited or all references
+ */
+function generateBibliography(onlyCited = true) {
+  const analysis = analyzeCitations();
+  const style = document.querySelector('.refs-style-btn.active')?.dataset.style || 'solent';
+  
+  let refs;
+  if (onlyCited) {
+    refs = Array.from(analysis.cited.values()).map(c => c.ref);
+  } else {
+    refs = getAllReferences();
+  }
+  
+  if (!refs.length) {
+    showToast('No references to generate bibliography');
+    return;
+  }
+  
+  // Sort alphabetically by author
+  refs.sort((a, b) => (a.author || '').localeCompare(b.author || ''));
+  
+  // Format each reference
+  const bibliography = refs.map(ref => formatRef(ref, style)).join('\n\n');
+  
+  // Copy to clipboard
+  navigator.clipboard.writeText(bibliography).then(() => {
+    showToast(`✓ Bibliography copied (${refs.length} source${refs.length !== 1 ? 's' : ''})`);
+  }).catch(() => {
+    showToast('❌ Failed to copy');
+  });
+}
+
+/**
+ * Switch to a specific section in notes view
+ */
+function switchToSection(sectionId) {
+  // Switch to Notes tab
+  document.querySelector('[data-view="notes"]').click();
+  
+  // Wait for notes view to render, then click the section
+  setTimeout(() => {
+    const sectionBtn = document.querySelector(`[data-section="${sectionId}"]`);
+    if (sectionBtn) {
+      sectionBtn.click();
+    }
+  }, 100);
+}
+// ─── AI Draft Starter ─────────────────────────────────────────────────────────
+let draftEditorInstance = null;
+async function initDraftView() {
+  // Populate models into the existing static dropdown
+  const modelSelect = document.getElementById('draft-model-select');
+  if (modelSelect && (modelSelect.value === '' || modelSelect.options[0]?.text === 'Loading models')) {
+    modelSelect.innerHTML = '<option value="">Loading…</option>';
+    try {
+      const models = await ollamaGetModels();
+      if (!models || models.length === 0) {
+        modelSelect.innerHTML = '<option value="">No models — start Ollama</option>';
+      } else {
+        modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
+        if (selectedAiModel && models.includes(selectedAiModel)) {
+          modelSelect.value = selectedAiModel;
+        }
+      }
+    } catch (e) {
+      modelSelect.innerHTML = '<option value="">Error loading models</option>';
+    }
+  }
+
+  // Populate section dropdown
+  const sectionSelect = document.getElementById('draft-section-select');
+  if (sectionSelect) {
+    const prev = sectionSelect.value;
+    sectionSelect.innerHTML = '<option value="">Select section…</option>';
+    state.outline.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.title;
+      sectionSelect.appendChild(opt);
+    });
+    if (prev) sectionSelect.value = prev;
+  }
+}
+
 
 async function generateDraft() {
   if (!state.outline.length) {
@@ -3117,35 +3962,6 @@ RULES:
   genBtn.style.display = '';
   stopBtn.style.display = 'none';
   if (!stopped) showToast(collectedRefs.length ? '✅ Draft done — refs collected at bottom!' : '✅ Draft complete!');
-}
-function reattachAnalysisListeners() {
-  // Re-run button
-  const rerunBtn = document.getElementById('rerun-analysis');
-  if (rerunBtn) {
-    rerunBtn.addEventListener('click', async () => {
-      const model = await showModelSelectionPopup('Select Model for Brief Analysis', selectedAiModel);
-      if (!model) return;
-      selectedAiModel = model;
-      runBriefAnalysis(model);
-    });
-  }
-
-  // Generate buttons for each analysis type
-  const generateBtns = document.querySelectorAll('[id^="gen-"]');
-  generateBtns.forEach(btn => {
-    const type = btn.id.replace('gen-', '');
-    btn.addEventListener('click', async () => {
-      const model = await showModelSelectionPopup(`Generate ${type.charAt(0).toUpperCase() + type.slice(1)}`, selectedAiModel);
-      if (!model) return;
-      selectedAiModel = model;
-      
-      // Call appropriate generation function
-      if (type === 'research') generateResearchPlan(model);
-      else if (type === 'timeline') generateTimeline(model);
-      else if (type === 'rubric') generateRubric(model);
-      else if (type === 'arguments') generateArguments(model);
-    });
-  });
 }
 
 // ─── Start ────────────────────────────────────────────────────────────────────

@@ -1,11 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta
-    http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://localhost:11434">
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta
+http-equiv="Content-Security-Policy"
+  content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://localhost:11434">
   <title>Assignment Desk</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -54,6 +52,8 @@
     <button class="nav-item"        data-view="refs">📚 References</button>
     <button class="nav-item"        data-view="checker">✍️ Checker</button>
     <button class="nav-item"        data-view="draft">🤖 Draft</button>
+    <button id="version-btn" class="btn-ghost" title="Version History">📜 Versions
+</button>
   </div>
 
   <!-- Views -->
@@ -97,6 +97,7 @@
     <div id="view-notes" class="view">
       <div id="notes-nav"></div>
       <div id="notes-body"></div>
+
     </div>
 
     <!-- Progress -->
@@ -165,46 +166,51 @@
     </div>
 
     <!-- References -->
-    <div id="view-refs" class="view">
-      <div class="section-label">Reference Formatter</div>
-      <div class="refs-style-row" id="refs-style-row">
-        <button class="refs-style-btn active" data-style="solent">Solent Harvard</button>
-        <button class="refs-style-btn" data-style="harvard">Harvard</button>
-        <button class="refs-style-btn" data-style="apa">APA 7th</button>
-        <button class="refs-style-btn" data-style="mla">MLA 9th</button>
-        <button class="refs-style-btn" data-style="vancouver">Vancouver</button>
-        <button class="refs-style-btn" data-style="oscola">OSCOLA</button>
-        <button class="refs-style-btn" data-style="chicago">Chicago</button>
+<div id="view-refs" class="view">
+  <div class="section-label">Reference Formatter</div>
+  
+  <!-- Citation style buttons -->
+  <div class="refs-style-row" id="refs-style-row">
+    <button class="refs-style-btn active" data-style="solent">Solent Harvard</button>
+    <button class="refs-style-btn" data-style="harvard">Harvard</button>
+    <button class="refs-style-btn" data-style="apa">APA 7th</button>
+    <button class="refs-style-btn" data-style="mla">MLA 9th</button>
+    <button class="refs-style-btn" data-style="vancouver">Vancouver</button>
+    <button class="refs-style-btn" data-style="oscola">OSCOLA</button>
+    <button class="refs-style-btn" data-style="chicago">Chicago</button>
+  </div>
+  
+  <div class="refs-layout">
+    <div class="refs-card">
+      <h4>📝 Format a Reference</h4>
+      <!-- Your existing reference formatter goes here -->
+      <select class="refs-type-select" id="refs-source-type">
+        <option value="book">Book</option>
+        <option value="journal">Journal Article</option>
+        <option value="website">Website / Web Page</option>
+        <option value="chapter">Chapter in Edited Book</option>
+        <option value="report">Report / Government Document</option>
+      </select>
+      <div class="refs-input-grid" id="refs-fields"></div>
+      <div class="refs-output-box" id="refs-output">
+        <div class="refs-output-empty">Fill in the fields above to generate your reference.</div>
       </div>
-      <div class="refs-layout">
-        <div class="refs-card">
-          <h4>📝 Format a Reference</h4>
-          <select class="refs-type-select" id="refs-source-type">
-            <option value="book">Book</option>
-            <option value="journal">Journal Article</option>
-            <option value="website">Website / Web Page</option>
-            <option value="chapter">Chapter in Edited Book</option>
-            <option value="report">Report / Government Document</option>
-          </select>
-          <div class="refs-input-grid" id="refs-fields"></div>
-          <div class="refs-output-box" id="refs-output">
-            <div class="refs-output-empty">Fill in the fields above to generate your reference.</div>
-          </div>
-          <div class="refs-copy-row">
-            <button class="btn-primary small" id="refs-copy-ref-btn">📋 Copy Reference</button>
-            <button class="btn-ghost small"   id="refs-copy-intext-btn">📋 Copy In-Text</button>
-            <button class="btn-ghost small"   id="refs-clear-btn">✕ Clear</button>
-          </div>
-        </div>
-        <div class="refs-card">
-          <h4>📚 All References (from Notes)</h4>
-          <div class="refs-copy-all-row">
-            <button class="btn-ghost small" id="refs-copy-all-btn">📋 Copy All as Reference List</button>
-          </div>
-          <div id="refs-all-list" class="refs-all-list"></div>
-        </div>
+      <div class="refs-copy-row">
+        <button class="btn-primary small" id="refs-copy-ref-btn">📋 Copy Reference</button>
+        <button class="btn-ghost small" id="refs-copy-intext-btn">📋 Copy In-Text</button>
+        <button class="btn-ghost small" id="refs-clear-btn">✕ Clear</button>
       </div>
     </div>
+    
+    <div class="refs-card">
+      <h4>📚 All References (from Notes)</h4>
+      <!-- THIS IS WHERE STATS WILL BE INSERTED DYNAMICALLY -->
+      <!-- refs-all-list container -->
+      <div id="refs-all-list" class="refs-all-list"></div>
+    </div>
+  </div>
+</div>
+
 
     <!-- Writing Checker -->
     <div id="view-checker" class="view">
@@ -290,7 +296,31 @@
     <div id="pomo-sessions">Sessions today: <span id="pomo-count">0</span></div>
   </div>
 </div>
+<div id="focus-mode" class="focus-mode-overlay">
+  <div class="focus-mode-content">
+    <div class="focus-mode-header">
+      <h3 class="focus-mode-title" id="focus-section-title">Section Title</h3>
+    </div>
+    <textarea 
+      id="focus-editor" 
+      class="focus-mode-editor" 
+      placeholder="Start writing..."
+    ></textarea>
+  </div>
+  <div class="focus-mode-footer">
+    <div class="focus-mode-stats">
+      <span id="focus-word-count">0 words</span>
+      <span>•</span>
+      <span id="focus-timer">00:00</span>
+    </div>
+    <div class="focus-mode-exit">Press ESC to exit focus mode</div>
+  </div>
+</div>
+<!-- Simple Rich Editor (No Dependencies) -->
+<script src="richEditor.js"></script>
 
+<!-- Your App -->
 <script src="renderer.js"></script>
+
 </body>
 </html>

@@ -1,6 +1,6 @@
 {
   "name": "assignment-desk",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "description": "A smart assignment writing companion for students",
   "author": "Ted",
   "main": "main.js",
@@ -20,6 +20,7 @@
       "print.html",
       "style.css",
       "renderer.js",
+      "richEditor.js",
       "assets/**/*",
       "node_modules/**/*"
     ],
@@ -42,11 +43,30 @@
   "devDependencies": {
     "electron": "^41.2.0",
     "electron-builder": "^26.8.1",
+    "esbuild": "^0.28.0",
     "rimraf": "^5.0.5"
   },
   "dependencies": {
+    "@tiptap/core": "^3.22.4",
+    "@tiptap/extension-character-count": "^3.22.4",
+    "@tiptap/extension-color": "^3.22.4",
+    "@tiptap/extension-highlight": "^3.22.4",
+    "@tiptap/extension-placeholder": "^3.22.4",
+    "@tiptap/extension-table": "^3.22.4",
+    "@tiptap/extension-table-cell": "^3.22.4",
+    "@tiptap/extension-table-header": "^3.22.4",
+    "@tiptap/extension-table-row": "^3.22.4",
+    "@tiptap/extension-task-item": "^3.22.4",
+    "@tiptap/extension-task-list": "^3.22.4",
+    "@tiptap/extension-text-align": "^3.22.4",
+    "@tiptap/extension-text-style": "^3.22.4",
+    "@tiptap/extension-underline": "^3.22.4",
+    "@tiptap/pm": "^3.22.4",
+    "@tiptap/starter-kit": "^3.22.4",
     "docx": "^9.6.1",
+    "file-saver": "^2.0.5",
     "mammoth": "^1.12.0",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "turndown": "^7.2.4"
   }
 }

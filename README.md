@@ -1,6 +1,6 @@
 # 📚 Assignment Desk
 
-A desktop app built with Electron to help students plan, write, and track their assignments — all in one place, offline, with no accounts required. Now with optional **local AI analysis** powered by Ollama — no data ever leaves your machine.
+A desktop app built with Electron to help students plan, write, and track their assignments — all in one place, offline, with no accounts required. Now with optional **local AI analysis** powered by Ollama and **Smart Citation Management** — no data ever leaves your machine.
 
 [![GitHub release](https://img.shields.io/github/v/release/plusive27-max/Assignment-Desk?style=for-the-badge&color=6c8ef5&label=Download)](https://github.com/plusive27-max/Assignment-Desk/releases/latest)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue?style=for-the-badge&logo=windows)
@@ -14,7 +14,7 @@ A desktop app built with Electron to help students plan, write, and track their 
 
 ## 📑 Table of Contents
 
-- [What's New in v1.2.0](#-whats-new-in-v120)
+- [What's New in v2.0.0](#-whats-new-in-v200)
 - [Features](#-features)
 - [AI Features](#-ai-features-optional)
 - [Download & Install](#-download--install)
@@ -24,13 +24,26 @@ A desktop app built with Electron to help students plan, write, and track their 
 - [Data & Privacy](#-data--privacy)
 - [Project Structure](#-project-structure)
 - [UI Tips](#-ui-tips)
-- [Keyboard Shortcuts](#-keyboard-shortcuts-new)
+- [Keyboard Shortcuts](#-keyboard-shortcuts)
 - [Built With](#-built-with)
 - [Licence](#-licence)
 
 ---
 
-## 🎉 What's New in v1.2.0
+## 🎉 What's New in v2.0.0
+
+### 📚 Smart Citation Manager
+Never lose track of your references again! The new Citation Manager automatically detects citations in your notes and tracks their usage:
+
+- **Auto-detect citations** - Automatically finds citations like "(Smith, 2020)" in your notes
+- **Citation tracking** - See which references are cited and how many times
+- **Usage badges** - Visual indicators show "✓ Cited 3×" or "Not cited" for each reference
+- **Location tracking** - Click to jump to sections where a reference is cited
+- **Insert citations** - One-click insertion of citations into your notes
+- **Missing references warning** - Alerts you when citations don't match your reference list
+- **Bibliography generation** - Copy bibliography with cited sources only or all references
+- **Citation statistics** - View total citations, unique sources, and unused references
+- **Multi-style support** - Works with Harvard, APA, MLA, Vancouver, OSCOLA, and Chicago styles
 
 ### ⌨️ Keyboard Shortcuts
 Work faster with full keyboard support:
@@ -90,7 +103,7 @@ Visual feedback in the top-right corner:
 | **Progress** | Track words written per section. Paste & Count panel lets you paste a draft and live-count words, then apply the count to any section. |
 | **Checklist** | 18-point submission checklist covering brief understanding, citations, proofreading, and submission readiness. |
 | **Preview** | Clean preview of your full assignment — all sections, notes, and references in one view. |
-| **References** | Format references in Solent Harvard, Harvard, APA 7th, MLA 9th, Vancouver, OSCOLA, or Chicago. Pulls all citations from your Notes automatically. |
+| **References** 📚 | **[NEW!]** Format references in Solent Harvard, Harvard, APA 7th, MLA 9th, Vancouver, OSCOLA, or Chicago. Pulls all citations from your Notes automatically. **Smart Citation Manager** shows which references are cited, how many times, and where. One-click citation insertion, missing reference warnings, and instant bibliography generation. |
 | **Checker** | Paste a draft and run a rule-based analysis: quote balance, repeated phrases, sentence complexity, passive voice, and readability score. |
 | **Checker → ✨ AI Check** | Uses a local LLM to give structured feedback across 6 areas: brief alignment, academic tone, argument structure, cohesion, citation gaps, and an overall grade estimate with UK grade band. **Now fully working with model selection.** |
 | **Draft** | Uses your outline to generate section drafts. Starter mode writes opening paragraphs; Full Draft writes the full section text. |
@@ -223,16 +236,17 @@ Requires `electron-builder` (already listed as a dev dependency).
 assignment-desk/
 ├── main.js          # Electron main process — IPC, PDF export, file handling
 ├── preload.js       # Context bridge — exposes safe API to renderer
-├── renderer.js      # All UI logic — state, views, AI features, event listeners
+├── renderer.js      # All UI logic — state, views, AI features, citation manager, event listeners
+├── richEditor.js    # Rich text editor component
 ├── index.html       # App shell and all view markup
 ├── print.html       # Hidden print window used for PDF generation
-├── style.css        # All styles — dark/light mode, components
+├── style.css        # All styles — dark/light mode, components, citation manager UI
 └── package.json
 ```
 
 ---
 
-## ⌨️ Keyboard Shortcuts (New!)
+## ⌨️ Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
@@ -257,6 +271,9 @@ assignment-desk/
 - In **Outline**, drag the `⠿` handle to reorder sections.
 - In **Notes**, use the search box to filter sections by keyword.
 - In **Progress → Paste & Count**, click the panel header to expand it, paste your draft, choose a section, and click **Apply Count**.
+- In **References**, click citation style buttons to switch between Harvard, APA, MLA, etc. The **Smart Citation Manager** shows which references are actually cited in your notes with usage counts and location links.
+- Click **📎 Insert** on any reference to instantly add the citation to your active notes section.
+- Use **Copy Bibliography (Cited Only)** to generate a reference list with only the sources you've actually cited.
 - The **✨ AI Analyse** button in Brief and **✨ AI Check** in Checker share the same model selection — pick your model once and it carries across both features.
 - For Draft, use **Starter** when you want short opening paragraphs and **Full Draft** when you want the whole section generated.
 - Templates now automatically focus the first input — no more manual clicking needed!
@@ -269,6 +286,7 @@ assignment-desk/
 - [electron-builder](https://www.electron.build/)
 - [pdf-parse](https://www.npmjs.com/package/pdf-parse) — reads PDF briefs
 - [mammoth](https://www.npmjs.com/package/mammoth) — reads DOCX briefs
+- [docx](https://www.npmjs.com/package/docx) — generates DOCX exports
 - [Ollama](https://ollama.com) *(optional)* — local LLM inference for AI features
 - Vanilla JavaScript, HTML, CSS — no frontend framework
 
